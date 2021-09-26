@@ -12,4 +12,4 @@ COPY . /app
 WORKDIR /app
 RUN apt-get update
 RUN pip install -r requirements.txt --user
-CMD python invoiceAnalysis.py
+CMD flask run

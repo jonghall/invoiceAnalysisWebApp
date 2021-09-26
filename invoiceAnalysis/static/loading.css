@@ -1,0 +1,9 @@
+
+.preload {
+    display: table-cell;
+    width:200px;
+    height: 200px;
+    vertical-align: middle;
+    text-align: center;
+    left: 10%;
+}

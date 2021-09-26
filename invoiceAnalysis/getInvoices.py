@@ -17,31 +17,11 @@
 #   Get RECURRING, NEW, and Onetime Invoices with a invoice amount > 0
 #   Return toplevel items and export to excel spreadsheet
 #
-# usage: invoiceAnalysis.py [-h] -k apikey -s YYYY-MM -e YYYY-MM [--COS_APIKEY COS_APIKEY] [--COS_ENDPOINT COS_ENDPOINT] [--COS_INSTANCE_CRN COS_INSTANCE_CRN] [--COS_BUCKET COS_BUCKET] [--output OUTPUT] [--SL_PRIVATE | --no-SL_PRIVATE]
-# Export usage detail by invoice month to an Excel file for all IBM Cloud Classic invoices and PaaS Consumption.
-# optional arguments:
-#   -h, --help            show this help message and exit
-#   -k apikey, --IC_API_KEY apikey
-#                         IBM Cloud API Key
-#   -s YYYY-MM, --startdate YYYY-MM
-#                        Start Year & Month in format YYYY-MM
-#   -e YYYY-MM, --enddate YYYY-MM
-#                         End Year & Month in format YYYY-MM
-#   --COS_APIKEY COS_APIKEY
-#                         COS apikey to use for Object Storage.
-#   --COS_ENDPOINT COS_ENDPOINT
-#                         COS endpoint to use for Object Storage.
-#   --COS_INSTANCE_CRN COS_INSTANCE_CRN
-#                         COS Instance CRN to use for file upload.
-#   --COS_BUCKET COS_BUCKET
-#                         COS Bucket name to use for file upload.
-#   --output OUTPUT       Filename Excel output file. (including extension of .xlsx)
-#   --SL_PRIVATE, --no-SL_PRIVATE
-#                         Use IBM Cloud Classic Private API Endpoint (default: False)
+
 
 __author__ = 'jonhall'
 
-import SoftLayer, argparse, os, logging, logging.config, json
+import SoftLayer, argparse, os, logging, logging.config, json, calendar
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
 import pandas as pd
@@ -91,18 +71,18 @@ def getSLIClinvoicedate(invoiceDate):
         year = year + 1
     return datetime(year, month, 1).strftime('%Y-%m')
 
-def getInvoiceDates(startdate,enddate):
+def getInvoiceDates(invoiceDate):
     # Adjust dates to match SLIC Invoice cutoffs
-    month = int(startdate[5:7]) - 1
-    year = int(startdate[0:4])
+    month = int(invoiceDate[5:7]) - 1
+    year = int(invoiceDate[0:4])
     if month == 0:
         year = year - 1
         month = 12
     day = 20
     startdate = datetime(year, month, day).strftime('%m/%d/%Y')
 
-    month = int(enddate[5:7])
-    year = int(enddate[0:4])
+    month = int(invoiceDate[5:7])
+    year = int(invoiceDate[0:4])
     day = 19
     enddate = datetime(year, month, day).strftime('%m/%d/%Y')
     return startdate, enddate
@@ -131,11 +111,11 @@ def getInvoiceList(startdate, enddate):
         quit()
     return invoiceList
 
-def getInvoiceDetail(startdate, enddate):
+def getInvoiceDetail(IC_API_KEY, startdate, enddate):
     #
     # GET InvoiceDetail
     #
-    global IC_API_KEY, client, SL_ENDPOINT
+    global client, SL_ENDPOINT
 
     # Create Classic infra API client
     client = SoftLayer.Client(username="apikey", api_key=IC_API_KEY, endpoint_url=SL_ENDPOINT)
@@ -145,6 +125,8 @@ def getInvoiceDetail(startdate, enddate):
 
     # Create dataframe to work with for classic infrastructure invoices
     df = pd.DataFrame(columns=['Portal_Invoice_Date',
+                               'Service_Date_Start',
+                               'Service_Date_End',
                                'IBM_Invoice_Month',
                                'Portal_Invoice_Number',
                                'Type',
@@ -176,6 +158,15 @@ def getInvoiceDetail(startdate, enddate):
 
         invoiceTotalRecurringAmount = float(invoice['invoiceTotalRecurringAmount'])
         invoiceType = invoice['typeCode']
+        if invoiceType == "NEW" or invoiceType:
+            serviceDateStart = invoiceDate
+            # get last day of month
+            serviceDateEnd= serviceDateStart.replace(day=calendar.monthrange(serviceDateStart.year,serviceDateStart.month)[1])
+
+        if invoiceType == "CREDIT" or invoiceType == "ONE-TIME-CHARGE":
+            serviceDateStart = invoiceDate
+            serviceDateEnd = invoiceDate
+
         totalItems = invoice['invoiceTopLevelItemCount']
 
         # PRINT INVOICE SUMMARY LINE
@@ -217,22 +208,33 @@ def getInvoiceDetail(startdate, enddate):
 
                 # If Hourly calculate hourly rate and total hours
                 if item["hourlyFlag"]:
-                    if float(item["hourlyRecurringFee"]) > 0:
-
-                        hourlyRecurringFee = float(item['hourlyRecurringFee']) + sum(
-                            float(child['hourlyRecurringFee']) for child in item["children"])
-                        hours = round(float(recurringFee) / hourlyRecurringFee)
-                    else:
-                        hourlyRecurringFee = 0
-                        hours = 0
-                # Not an hourly billing item
+                    # if hourly charges are previous month usage
+                    serviceDateStart = invoiceDate - relativedelta(months=1)
+                    serviceDateEnd = serviceDateStart.replace(day=calendar.monthrange(serviceDateStart.year, serviceDateStart.month)[1])
+                    hourlyRecurringFee = 0
+                    hours = 0
+                    if "hourlyRecurringFee" in item:
+                        if float(item["hourlyRecurringFee"]) > 0:
+                            hourlyRecurringFee = float(item['hourlyRecurringFee'])
+                            for child in item["children"]:
+                                if "hourlyRecurringFee" in child:
+                                    hourlyRecurringFee = hourlyRecurringFee + float(child['hourlyRecurringFee'])
+                            hours = round(float(recurringFee) / hourlyRecurringFee)            # Not an hourly billing item
                 else:
+                    if categoryName.find("Platform Service Plan") != -1:
+                        # Non Hourly PaaS Usage from actual usage two months prior
+                        serviceDateStart = invoiceDate - relativedelta(months=2)
+                        serviceDateEnd = serviceDateStart.replace(day=calendar.monthrange(serviceDateStart.year, serviceDateStart.month)[1])
+                    else:
+                        # Non Hoorly other
+                        if invoiceType == "RECURRING":
+                            serviceDateStart = invoiceDate
+                            serviceDateEnd = serviceDateStart.replace(day=calendar.monthrange(serviceDateStart.year, serviceDateStart.month)[1])
                     hourlyRecurringFee = 0
                     hours = 0
 
                 # Special handling for storage
                 if category == "storage_service_enterprise" or category == "performance_storage_iscsi":
-
                     if category == "storage_service_enterprise":
                         iops = getDescription("storage_tier_level", item["children"])
                         storage = getDescription("performance_storage_space", item["children"])
@@ -250,6 +252,8 @@ def getInvoiceDetail(startdate, enddate):
 
                 # Append record to dataframe
                 row = {'Portal_Invoice_Date': invoiceDate.strftime("%Y-%m-%d"),
+                       'Service_Date_Start': serviceDateStart.strftime("%Y-%m-%d"),
+                       'Service_Date_End': serviceDateEnd.strftime("%Y-%m-%d"),
                        'IBM_Invoice_Month': SLICInvoiceDate,
                        'Portal_Invoice_Number': invoiceID,
                        'BillingItemId': billingItemId,
@@ -294,10 +298,10 @@ def createReport(filename):
 
     classicUsage["totalAmount"] = classicUsage["totalOneTimeAmount"] + classicUsage["totalRecurringCharge"]
     SLICInvoice = pd.pivot_table(classicUsage,
-                                 index=["IBM_Invoice_Month", "Portal_Invoice_Date", "Portal_Invoice_Number", "Type"],
+                                 index=["Type", "Portal_Invoice_Number", "Service_Date_Start", "Service_Date_End"],
                                  values=["totalAmount"],
-                                 aggfunc={'totalAmount': np.sum}, fill_value=0)
-    out = pd.concat([d.append(d.sum().rename((k, '-', '-', 'Total'))) for k, d in SLICInvoice.groupby('IBM_Invoice_Month')])
+                                 aggfunc={'totalAmount': np.sum}, fill_value=0).sort_values(by=['Service_Date_Start'])
+    out = pd.concat([d.append(d.sum().rename((k, '-', '-', 'Total'))) for k, d in SLICInvoice.groupby('Type')])
 
     out.to_excel(writer, 'InvoiceMap')
     worksheet = writer.sheets['InvoiceMap']
@@ -488,12 +492,10 @@ def getAccountId(IC_API_KEY):
 
     return api_key["account_id"]
 
-def accountUsage(startdate, enddate):
+def accountUsage(IC_API_KEY, IC_ACCOUNT_ID, startdate, enddate):
     ##########################################################
     ## Get Usage for Account matching recuring invoice periods
     ##########################################################
-    global IC_ACCOUNT_ID, IC_API_KEY
-
 
     try:
         authenticator = IAMAuthenticator(IC_API_KEY)
@@ -553,64 +555,22 @@ def accountUsage(startdate, enddate):
                     accountUsage = accountUsage.append(row, ignore_index=True)
     return accountUsage
 
-if __name__ == "__main__":
-    setup_logging()
-    parser = argparse.ArgumentParser(
-        description="Export usage detail by invoice month to an Excel file for all IBM Cloud Classic invoices and PaaS Consumption.")
-    parser.add_argument("-k", "--IC_API_KEY", default=os.environ.get('IC_API_KEY', None), metavar="apikey", help="IBM Cloud API Key")
-    parser.add_argument("-s", "--startdate", default=os.environ.get('startdate', None), metavar="YYYY-MM", help="Start Year & Month in format YYYY-MM")
-    parser.add_argument("-e", "--enddate", default=os.environ.get('enddate', None), metavar="YYYY-MM", help="End Year & Month in format YYYY-MM")
-    parser.add_argument("--COS_APIKEY", default=os.environ.get('COS_APIKEY', None), help="COS apikey to use for Object Storage.")
-    parser.add_argument("--COS_ENDPOINT", default=os.environ.get('COS_ENDPOINT', None), help="COS endpoint to use for Object Storage.")
-    parser.add_argument("--COS_INSTANCE_CRN", default=os.environ.get('COS_INSTANCE_CRN', None), help="COS Instance CRN to use for file upload.")
-    parser.add_argument("--COS_BUCKET", default=os.environ.get('COS_BUCKET', None), help="COS Bucket name to use for file upload.")
-    parser.add_argument("--output", default=os.environ.get('output', 'invoice-analysis.xlsx'), help="Filename Excel output file. (including extension of .xlsx)")
-    parser.add_argument("--SL_PRIVATE", default=False, action=argparse.BooleanOptionalAction, help="Use IBM Cloud Classic Private API Endpoint")
-    parser.add_argument("--PAAS_USE_USAGE_MONTH", default=False, action=argparse.BooleanOptionalAction, help="Use actual PaaS usage month for pivots instead of IBM Invoice Month which matches IBM invoices.")
-    args = parser.parse_args()
-
-    if args.startdate == None or args.enddate == None:
-        logging.error("You must provide a start and end month and year in the format of YYYY-MM.")
-        quit()
-    if args.IC_API_KEY == None:
-        logging.error("You must provide an IBM Cloud ApiKey with billing View authority to run script.")
-        quit()
-
-    IC_API_KEY = args.IC_API_KEY
-
+def runAnalysis(IC_API_KEY, month):
+    global SL_ENDPOINT, classicUsage, paasUsage, useMonth
     # Calculate invoice dates based on SLIC invoice cutoffs.
-    startdate, enddate = getInvoiceDates(args.startdate, args.enddate)
+    startdate, enddate = getInvoiceDates(month)
 
     # Change endpoint to private Endpoint if command line open chosen
-    if args.SL_PRIVATE:
-        SL_ENDPOINT = "https://api.service.softlayer.com/xmlrpc/v3.1"
-    else:
-        SL_ENDPOINT = "https://api.softlayer.com/xmlrpc/v3.1"
+    SL_ENDPOINT = "https://api.softlayer.com/xmlrpc/v3.1"
 
     #  Retrieve Invoices from classic
-    classicUsage = getInvoiceDetail(startdate, enddate)
+    classicUsage = getInvoiceDetail(IC_API_KEY, startdate, enddate)
 
     # Retrieve Usage from IBM Cloud
     IC_ACCOUNT_ID = getAccountId(IC_API_KEY)
-    if args.PAAS_USE_USAGE_MONTH:
-        useMonth = "usageMonth"
-    else:
-        useMonth = "invoiceMonth"
 
-    paasUsage = accountUsage(startdate, enddate)
+    useMonth = "invoiceMonth"
+    paasUsage = accountUsage(IC_API_KEY, IC_ACCOUNT_ID, startdate, enddate)
 
     # Build Exel Report
-    createReport(args.output)
-
-    # upload created file to COS if COS credentials provided
-    if args.COS_APIKEY != None:
-        cos = ibm_boto3.resource("s3",
-                                 ibm_api_key_id=args.COS_APIKEY,
-                                 ibm_service_instance_id=args.COS_INSTANCE_CRN,
-                                 config=Config(signature_version="oauth"),
-                                 endpoint_url=args.COS_ENDPOINT
-                                 )
-        multi_part_upload(args.COS_BUCKET, args.output, "./" + args.output)
-        #cleanup file
-        logging.info("Deleting {} local file.".format(args.output))
-        os.remove("./"+args.output)
+    createReport("invoiceAnalysis.xlsx")

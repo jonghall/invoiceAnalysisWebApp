@@ -1,0 +1,11 @@
+table {
+    font-size: 12px !important;
+}
+#datacenter {
+    width: 80%;
+}
+p.alert {
+    margin-bottom: 0px;
+    margin-left: -15px;
+    margin-right: -15px;
+}
