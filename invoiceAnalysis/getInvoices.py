@@ -143,7 +143,8 @@ def getInvoiceDetail(IC_API_KEY, startdate, enddate):
                                'totalRecurringCharge',
                                'totalOneTimeAmount',
                                'InvoiceTotal',
-                               'InvoiceRecurring'])
+                               'InvoiceRecurring',
+                               'Recurring_Description'])
 
     for invoice in invoiceList:
         if float(invoice['invoiceTotalAmount']) == 0:
@@ -158,6 +159,7 @@ def getInvoiceDetail(IC_API_KEY, startdate, enddate):
 
         invoiceTotalRecurringAmount = float(invoice['invoiceTotalRecurringAmount'])
         invoiceType = invoice['typeCode']
+        recurringDesc = ""
         if invoiceType == "NEW" or invoiceType:
             serviceDateStart = invoiceDate
             # get last day of month
@@ -211,6 +213,7 @@ def getInvoiceDetail(IC_API_KEY, startdate, enddate):
                     # if hourly charges are previous month usage
                     serviceDateStart = invoiceDate - relativedelta(months=1)
                     serviceDateEnd = serviceDateStart.replace(day=calendar.monthrange(serviceDateStart.year, serviceDateStart.month)[1])
+                    recurringDesc = "IaaS Usage"
                     hourlyRecurringFee = 0
                     hours = 0
                     if "hourlyRecurringFee" in item:
@@ -225,11 +228,13 @@ def getInvoiceDetail(IC_API_KEY, startdate, enddate):
                         # Non Hourly PaaS Usage from actual usage two months prior
                         serviceDateStart = invoiceDate - relativedelta(months=2)
                         serviceDateEnd = serviceDateStart.replace(day=calendar.monthrange(serviceDateStart.year, serviceDateStart.month)[1])
+                        recurringDesc = "Platform Service Usage"
                     else:
                         # Non Hoorly other
                         if invoiceType == "RECURRING":
                             serviceDateStart = invoiceDate
                             serviceDateEnd = serviceDateStart.replace(day=calendar.monthrange(serviceDateStart.year, serviceDateStart.month)[1])
+                            recurringDesc = "IaaS Monthly"
                     hourlyRecurringFee = 0
                     hours = 0
 
@@ -270,7 +275,8 @@ def getInvoiceDetail(IC_API_KEY, startdate, enddate):
                        'totalOneTimeAmount': float(totalOneTimeAmount),
                        'InvoiceTotal': float(invoiceTotalAmount),
                        'InvoiceRecurring': float(invoiceTotalRecurringAmount),
-                       'Type': invoiceType
+                       'Type': invoiceType,
+                       'Recurring_Description': recurringDesc
                         }
 
                 df = df.append(row, ignore_index=True)
@@ -298,17 +304,41 @@ def createReport(filename):
 
     classicUsage["totalAmount"] = classicUsage["totalOneTimeAmount"] + classicUsage["totalRecurringCharge"]
     SLICInvoice = pd.pivot_table(classicUsage,
-                                 index=["Type", "Portal_Invoice_Number", "Service_Date_Start", "Service_Date_End"],
+                                 index=["Type", "Portal_Invoice_Number", "Service_Date_Start", "Service_Date_End", "Recurring_Description"],
                                  values=["totalAmount"],
                                  aggfunc={'totalAmount': np.sum}, fill_value=0).sort_values(by=['Service_Date_Start'])
-    out = pd.concat([d.append(d.sum().rename((k, '-', '-', 'Total'))) for k, d in SLICInvoice.groupby('Type')])
 
-    out.to_excel(writer, 'InvoiceMap')
+    out = pd.concat([d.append(d.sum().rename((k, ' ', ' ', 'Subtotal', ' '))) for k, d in SLICInvoice.groupby('Type')]).append(SLICInvoice.sum().rename((' ', ' ', ' ', 'Pay this Amount', '')))
+    out.rename(columns={"Type": "Invoice Type", "Portal_Invoice_Number": "Invoice",
+                        "Service_Date_Start": "Service Start", "Service_Date_End": "Service End",
+                         "Recurring_Description": "Description", "totalAmount": "Amount"}, inplace=True)
+    out.to_excel(writer, 'InvoiceMap',  startrow=13)
     worksheet = writer.sheets['InvoiceMap']
     format1 = workbook.add_format({'num_format': '$#,##0.00'})
     format2 = workbook.add_format({'align': 'left'})
-    worksheet.set_column("A:D", 20, format2)
-    worksheet.set_column("E:ZZ", 18, format1)
+    format_blue = workbook.add_format({"color": "#0000FF"})
+    worksheet.set_column("A:E", 20, format2)
+    worksheet.set_column("F:F", 18, format1)
+    worksheet.write("A1", "International Business Machines Corporation", format_blue)
+    worksheet.write("A2", "Please direct inquiries and correspondence to:", format_blue)
+    worksheet.write("A3", "IBM CORPORATION")
+    worksheet.write("A4", "3039 E CORNWALLIS")
+    worksheet.write("A5", "RESRCH TRI PK NC 27709")
+    worksheet.write("A7", "Customer Support: ", format_blue)
+    worksheet.write("A8", "Installed At: ", format_blue)
+    worksheet.write("A9", "CADENCE DESIGN SYSTEMS INC")
+    worksheet.write("A10", "2655 SEELY AVE")
+    worksheet.write("A11", "SAN JOSE CA  95134-1931")
+    worksheet.write("C2", "Customer Number", format_blue)
+    worksheet.write("C3", "1334622-HS")
+    worksheet.write("C8", "Invoice To:", format_blue)
+    worksheet.write("C9", "CADENCE DESIGN SYSTEMS INC")
+    worksheet.write("C10", "CADENCE DESIGN SYSTEMS INC")
+    worksheet.write("C11", "ACCOUNTS PAYABLE")
+    worksheet.write("D2", "Invoice Number", format_blue)
+    worksheet.write("D3", "C21CLMT")
+    worksheet.write("E2", "Invoice Date:", format_blue)
+    worksheet.write("E3", "XX/XX/XXXX")
 
     #
     # Build a pivot table by Invoice Type
