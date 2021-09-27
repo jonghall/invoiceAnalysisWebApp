@@ -10,7 +10,11 @@ LABEL maintainer="jonhall@us.ibm.com"
 # Install NGINX to test.
 COPY . /app
 WORKDIR /app
-RUN apt-get update
-RUN pip install -r requirements.txt --user
+RUN apt-get update -y && \
+    apt-get install -y python-pip python-dev
+
+COPY ./requirements.txt /app/requirements.txt
+RUN pip install -r requirements.txt
+ENTRYPOINT [ "python" ]
 ENV FLASK_APP=invoiceAnalysis
-CMD flask run
+CMD [ "app.py" ]
