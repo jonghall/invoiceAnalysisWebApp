@@ -9,9 +9,6 @@ Flask==2.0.1
 Flask-Bootstrap==3.3.7.1
 Flask-WTF==0.15.1
 ibm-cloud-sdk-core==3.11.3
-ibm-cos-sdk==2.10.0
-ibm-cos-sdk-core==2.10.0
-ibm-cos-sdk-s3transfer==2.10.0
 ibm-platform-services==0.20.1
 idna==2.9
 itsdangerous==2.0.1
@@ -31,7 +28,6 @@ pytz==2019.3
 requests==2.26.0
 six==1.14.0
 SoftLayer==5.9.7
-tasks==2.8.0
 urllib3==1.26.6
 uWSGI==2.0.19.1
 visitor==0.1.3
