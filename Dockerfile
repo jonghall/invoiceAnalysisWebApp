@@ -12,4 +12,4 @@ RUN apt-get update -y
 
 COPY ./requirements.txt /app/requirements.txt
 RUN pip install -r requirements.txt
-CMD [ "uwsgi --socket 0.0.0.0:5000 --protocol=http -w wsgi:app" ]
+CMD [ "uwsgi", "--socket 0.0.0.0:5000", "--protocol=http", "-w wsgi:app" ]
