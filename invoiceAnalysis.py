@@ -1,40 +1,20 @@
-#!/usr/bin/env python3
-# invoiceAnalysis.py - Export usage detail by invoice month to an Excel file for all IBM Cloud Classic invoices and PaaS Consumption.
-# Author: Jon Hall
-# Copyright (c) 2021
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#     http://www.apache.org/licenses/LICENSE-2.0
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-#
-#
-#   Get RECURRING, NEW, and Onetime Invoices with a invoice amount > 0
-#   Return toplevel items and export to excel spreadsheet
-#
-
-
-__author__ = 'jonhall'
-
-import SoftLayer, argparse, os, logging, logging.config, json, calendar, uuid
-from datetime import datetime
-from dateutil.relativedelta import relativedelta
+import SoftLayer, os, logging, logging.config, json, calendar, uuid
 import pandas as pd
 import numpy as np
-from logdna import LogDNAHandler
-import ibm_boto3
-from ibm_botocore.client import Config, ClientError
+from flask import Flask, render_template, request, send_file
+from flask_bootstrap import Bootstrap
+from forms import InvoiceAnalysisRequest
+from datetime import datetime
+from dateutil.relativedelta import relativedelta
 from ibm_platform_services import IamIdentityV1, UsageReportsV4
 from ibm_cloud_sdk_core import ApiException
 from ibm_cloud_sdk_core.authenticators import IAMAuthenticator
 
-def setup_logging(default_path='logging.json', default_level=logging.info, env_key='LOG_CFG'):
+app = Flask(__name__)
+app.config.from_object('config')
+bootstrap = Bootstrap(app)
 
+def setup_logging(default_path='logging.json', default_level=logging.info, env_key='LOG_CFG'):
     path = default_path
     value = os.getenv(env_key, None)
     if value:
@@ -42,9 +22,6 @@ def setup_logging(default_path='logging.json', default_level=logging.info, env_k
     if os.path.exists(path):
         with open(path, 'rt') as f:
             config = json.load(f)
-        if "handlers" in config:
-            if "logdna" in config["handlers"]:
-                config["handlers"]["logdna"]["key"] = os.getenv("logdna_ingest_key")
         logging.config.dictConfig(config)
     else:
         logging.basicConfig(level=default_level)
@@ -447,34 +424,6 @@ def createReport(filename):
 
     writer.save()
 
-def multi_part_upload(bucket_name, item_name, file_path):
-    try:
-        logging.info("Starting file transfer for {0} to bucket: {1}".format(item_name, bucket_name))
-        # set 5 MB chunks
-        part_size = 1024 * 1024 * 5
-
-        # set threadhold to 15 MB
-        file_threshold = 1024 * 1024 * 15
-
-        # set the transfer threshold and chunk size
-        transfer_config = ibm_boto3.s3.transfer.TransferConfig(
-            multipart_threshold=file_threshold,
-            multipart_chunksize=part_size
-        )
-
-        # the upload_fileobj method will automatically execute a multi-part upload
-        # in 5 MB chunks for all files over 15 MB
-        with open(file_path, "rb") as file_data:
-            cos.Object(bucket_name, item_name).upload_fileobj(
-                Fileobj=file_data,
-                Config=transfer_config
-            )
-        logging.info("Transfer for {0} complete".format(item_name))
-    except ClientError as be:
-        logging.error("CLIENT ERROR: {0}".format(be))
-    except Exception as e:
-        logging.error("Unable to complete multi-part upload: {0}".format(e))
-
 def getAccountId(IC_API_KEY):
     ##########################################################
     ## Get Account from the passed API Key
@@ -586,3 +535,21 @@ def runAnalysis(IC_API_KEY, month):
     filename = str(uuid.uuid4())+".xlsx"
     createReport(filename)
     return filename
+
+@app.route('/', methods=['GET', 'POST'])
+def index():
+    global IC_API_KEY
+    form=InvoiceAnalysisRequest(request.form)
+    if request.method == 'POST' and form.validate():
+        filename=runAnalysis(request.form.get("ic_api_key"), request.form.get("month"))
+        return render_template("finished.html", filename=filename)
+    return render_template("index.html", form=form)
+
+@app.route('/download/<filename>')
+def download_file(filename):
+    file_path = filename
+    return send_file(file_path, attachment_filename="invoiceAnalysis.xlsx", as_attachment=True)
+
+setup_logging()
+if __name__ == "__main__":
+    app.run(host='0.0.0.0')
