@@ -62,18 +62,6 @@
     <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datepicker/1.9.0/js/bootstrap-datepicker.min.js"></script>
     <script src='https://cdnjs.cloudflare.com/ajax/libs/Chart.js/1.0.2/Chart.min.js'></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/js/toastr.min.js"></script>
-    <script>
-    $('.dropdown-toggle').dropdown()
-    $(document).ready(function () {
-        $("#request").submit(function () {
-            $(".submitBtn").attr("disabled", true);
-            return true;
-        });
-        $(".utilization").click(function () {
-          toastr.options.positionClass = 'toast-top-center';
-          toastr.success('Loading invoiceAnalysis report...');
-        });
-    });
-    </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/js/toastr.min.js"></script>
 
 {% endblock %}

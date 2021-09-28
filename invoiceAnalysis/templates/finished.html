@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% import 'bootstrap/wtf.html' as wtf %}
+
+{% block app_content %}
+    <h1>Your invoiceAnalysis request has been completed.</h1>
+    <p>
+    Download the file <a href="download/{{ filename }}">HERE</a>
+    </p>
+{% endblock %}

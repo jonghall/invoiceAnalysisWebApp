@@ -21,7 +21,7 @@
 
 __author__ = 'jonhall'
 
-import SoftLayer, argparse, os, logging, logging.config, json, calendar
+import SoftLayer, argparse, os, logging, logging.config, json, calendar, uuid
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
 import pandas as pd
@@ -312,14 +312,13 @@ def createReport(filename):
     out.rename(columns={"Type": "Invoice Type", "Portal_Invoice_Number": "Invoice",
                         "Service_Date_Start": "Service Start", "Service_Date_End": "Service End",
                          "Recurring_Description": "Description", "totalAmount": "Amount"}, inplace=True)
-    out.to_excel(writer, 'InvoiceMap')
-    worksheet = writer.sheets['InvoiceMap']
+    out.to_excel(writer, 'TopSheet')
+    worksheet = writer.sheets['TopSheet']
     format1 = workbook.add_format({'num_format': '$#,##0.00'})
     format2 = workbook.add_format({'align': 'left'})
     format_blue = workbook.add_format({"color": "#0000FF"})
     worksheet.set_column("A:E", 20, format2)
     worksheet.set_column("F:F", 18, format1)
-
 
     #
     # Build a pivot table by Invoice Type
@@ -584,4 +583,6 @@ def runAnalysis(IC_API_KEY, month):
     paasUsage = accountUsage(IC_API_KEY, IC_ACCOUNT_ID, startdate, enddate)
 
     # Build Exel Report
-    createReport("invoiceAnalysis.xlsx")
+    filename = str(uuid.uuid4())+".xlsx"
+    createReport(filename)
+    return filename
