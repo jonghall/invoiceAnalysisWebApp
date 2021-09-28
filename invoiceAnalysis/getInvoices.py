@@ -312,33 +312,14 @@ def createReport(filename):
     out.rename(columns={"Type": "Invoice Type", "Portal_Invoice_Number": "Invoice",
                         "Service_Date_Start": "Service Start", "Service_Date_End": "Service End",
                          "Recurring_Description": "Description", "totalAmount": "Amount"}, inplace=True)
-    out.to_excel(writer, 'InvoiceMap',  startrow=13)
+    out.to_excel(writer, 'InvoiceMap')
     worksheet = writer.sheets['InvoiceMap']
     format1 = workbook.add_format({'num_format': '$#,##0.00'})
     format2 = workbook.add_format({'align': 'left'})
     format_blue = workbook.add_format({"color": "#0000FF"})
     worksheet.set_column("A:E", 20, format2)
     worksheet.set_column("F:F", 18, format1)
-    worksheet.write("A1", "International Business Machines Corporation", format_blue)
-    worksheet.write("A2", "Please direct inquiries and correspondence to:", format_blue)
-    worksheet.write("A3", "IBM CORPORATION")
-    worksheet.write("A4", "3039 E CORNWALLIS")
-    worksheet.write("A5", "RESRCH TRI PK NC 27709")
-    worksheet.write("A7", "Customer Support: ", format_blue)
-    worksheet.write("A8", "Installed At: ", format_blue)
-    worksheet.write("A9", "CADENCE DESIGN SYSTEMS INC")
-    worksheet.write("A10", "2655 SEELY AVE")
-    worksheet.write("A11", "SAN JOSE CA  95134-1931")
-    worksheet.write("C2", "Customer Number", format_blue)
-    worksheet.write("C3", "1334622-HS")
-    worksheet.write("C8", "Invoice To:", format_blue)
-    worksheet.write("C9", "CADENCE DESIGN SYSTEMS INC")
-    worksheet.write("C10", "CADENCE DESIGN SYSTEMS INC")
-    worksheet.write("C11", "ACCOUNTS PAYABLE")
-    worksheet.write("D2", "Invoice Number", format_blue)
-    worksheet.write("D3", "C21CLMT")
-    worksheet.write("E2", "Invoice Date:", format_blue)
-    worksheet.write("E3", "XX/XX/XXXX")
+
 
     #
     # Build a pivot table by Invoice Type
