@@ -9,10 +9,10 @@ from dateutil.relativedelta import relativedelta
 from ibm_platform_services import IamIdentityV1, UsageReportsV4
 from ibm_cloud_sdk_core import ApiException
 from ibm_cloud_sdk_core.authenticators import IAMAuthenticator
-
 app = Flask(__name__)
 app.config.from_object('config')
 bootstrap = Bootstrap(app)
+
 
 def setup_logging(default_path='logging.json', default_level=logging.info, env_key='LOG_CFG'):
     path = default_path
