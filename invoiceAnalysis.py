@@ -542,20 +542,18 @@ def runAnalysis(filename, IC_API_KEY, month):
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
-    global IC_API_KEY, filename, month
+    global IC_API_KEY, month
     form=InvoiceAnalysisRequest(request.form)
     if request.method == 'POST' and form.validate():
-        filename = str(uuid.uuid4()) + ".xlsx"
         IC_API_KEY = request.form.get("ic_api_key")
         month = request.form.get("month")
-        #x=threading.Thread(target=runAnalysis, args=(filename, request.form.get("ic_api_key"), request.form.get("month")))
-        #x.start()
         return render_template("running.html")
     return render_template("index.html", form=form)
 
 @app.route('/runreport', methods=['POST'])
 def runreport():
     global IC_API_KEY, filename, month
+    filename = str(uuid.uuid4()) + ".xlsx"
     reportAnalysis=runAnalysis.delay(filename, IC_API_KEY, month )
     response = jsonify()
     response.status_code=202
@@ -575,8 +573,7 @@ def reportstatus(task_id):
 @app.route('/download')
 def download_file():
     global filename
-    file_path = filename
-    return send_file(file_path, attachment_filename="invoiceAnalysis.xlsx", as_attachment=True)
+    return send_file(filename, attachment_filename="invoiceAnalysis.xlsx", as_attachment=True)
 
 
 setup_logging()
