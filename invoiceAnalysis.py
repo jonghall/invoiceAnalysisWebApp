@@ -519,7 +519,7 @@ def accountUsage(IC_API_KEY, IC_ACCOUNT_ID, startdate, enddate):
     return accountUsage
 
 @celery.task()
-def runAnalysis(filename, IC_API_KEY, month):
+def runAnalysis(IC_API_KEY, month):
     global SL_ENDPOINT, classicUsage, paasUsage, useMonth
     # Calculate invoice dates based on SLIC invoice cutoffs.
     startdate, enddate = getInvoiceDates(month)
@@ -537,6 +537,7 @@ def runAnalysis(filename, IC_API_KEY, month):
     paasUsage = accountUsage(IC_API_KEY, IC_ACCOUNT_ID, startdate, enddate)
 
     # Build Exel Report
+    filename = str(uuid.uuid4()) + ".xlsx"
     createReport(filename)
     return
 
@@ -552,9 +553,8 @@ def index():
 
 @app.route('/runreport', methods=['POST'])
 def runreport():
-    global IC_API_KEY, filename, month
-    filename = str(uuid.uuid4()) + ".xlsx"
-    reportAnalysis=runAnalysis.delay(filename, IC_API_KEY, month )
+    global IC_API_KEY, month
+    reportAnalysis=runAnalysis.delay(IC_API_KEY, month )
     response = jsonify()
     response.status_code=202
     response.headers['location'] = url_for('reportstatus', task_id=reportAnalysis)
@@ -565,14 +565,13 @@ def runreport():
 def reportstatus(task_id):
     results = runAnalysis.AsyncResult(task_id)
     if results.ready():
-        content = render_template('finished.html', usage=results.get())
+        content = render_template('finished.html', filename=results.get())
         return jsonify({'task_id': task_id, 'status': 'complete', 'content': content})
     return jsonify({'task_id': task_id, 'status': 'inprocess'})
 
 
-@app.route('/download')
-def download_file():
-    global filename
+@app.route('/download/<filename>')
+def download_file(filename):
     return send_file(filename, attachment_filename="invoiceAnalysis.xlsx", as_attachment=True)
 
 
