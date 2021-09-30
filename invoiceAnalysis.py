@@ -1,7 +1,8 @@
-import SoftLayer, os, logging, logging.config, json, calendar, uuid
+import SoftLayer, os, logging, logging.config, json, calendar, uuid, os.path
 import pandas as pd
 import numpy as np
-from flask import Flask, render_template, request, send_file
+from flask import Flask, render_template, request, send_file, jsonify, url_for
+from celery import Celery
 from flask_bootstrap import Bootstrap
 from forms import InvoiceAnalysisRequest
 from datetime import datetime
@@ -11,8 +12,11 @@ from ibm_cloud_sdk_core import ApiException
 from ibm_cloud_sdk_core.authenticators import IAMAuthenticator
 app = Flask(__name__)
 app.config.from_object('config')
+app.config['broker_url'] = 'redis://localhost:6379/0'
+app.config['result_backend'] = 'redis://localhost:6379/0'
+celery = Celery(app.name, broker=app.config['broker_url'])
+celery.conf.update(app.config)
 bootstrap = Bootstrap(app)
-
 
 def setup_logging(default_path='logging.json', default_level=logging.info, env_key='LOG_CFG'):
     path = default_path
@@ -514,7 +518,8 @@ def accountUsage(IC_API_KEY, IC_ACCOUNT_ID, startdate, enddate):
                     accountUsage = accountUsage.append(row, ignore_index=True)
     return accountUsage
 
-def runAnalysis(IC_API_KEY, month):
+@celery.task()
+def runAnalysis(filename, IC_API_KEY, month):
     global SL_ENDPOINT, classicUsage, paasUsage, useMonth
     # Calculate invoice dates based on SLIC invoice cutoffs.
     startdate, enddate = getInvoiceDates(month)
@@ -532,23 +537,47 @@ def runAnalysis(IC_API_KEY, month):
     paasUsage = accountUsage(IC_API_KEY, IC_ACCOUNT_ID, startdate, enddate)
 
     # Build Exel Report
-    filename = str(uuid.uuid4())+".xlsx"
     createReport(filename)
-    return filename
+    return
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
-    global IC_API_KEY
+    global IC_API_KEY, filename, month
     form=InvoiceAnalysisRequest(request.form)
     if request.method == 'POST' and form.validate():
-        filename=runAnalysis(request.form.get("ic_api_key"), request.form.get("month"))
-        return render_template("finished.html", filename=filename)
+        filename = str(uuid.uuid4()) + ".xlsx"
+        IC_API_KEY = request.form.get("ic_api_key")
+        month = request.form.get("month")
+        #x=threading.Thread(target=runAnalysis, args=(filename, request.form.get("ic_api_key"), request.form.get("month")))
+        #x.start()
+        return render_template("running.html")
     return render_template("index.html", form=form)
 
-@app.route('/download/<filename>')
-def download_file(filename):
+@app.route('/runreport', methods=['POST'])
+def runreport():
+    global IC_API_KEY, filename, month
+    reportAnalysis=runAnalysis.delay(filename, IC_API_KEY, month )
+    response = jsonify()
+    response.status_code=202
+    response.headers['location'] = url_for('reportstatus', task_id=reportAnalysis)
+    return response
+
+
+@app.route("/reportstatus/<task_id>", methods=["GET"])
+def reportstatus(task_id):
+    results = runAnalysis.AsyncResult(task_id)
+    if results.ready():
+        content = render_template('finished.html', usage=results.get())
+        return jsonify({'task_id': task_id, 'status': 'complete', 'content': content})
+    return jsonify({'task_id': task_id, 'status': 'inprocess'})
+
+
+@app.route('/download')
+def download_file():
+    global filename
     file_path = filename
     return send_file(file_path, attachment_filename="invoiceAnalysis.xlsx", as_attachment=True)
+
 
 setup_logging()
 if __name__ == "__main__":

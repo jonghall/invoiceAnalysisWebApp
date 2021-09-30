@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% import 'bootstrap/wtf.html' as wtf %}
+
+{% block app_content %}
+    <h1>Your invoiceAnalysis report is running.  This page will be updated with a download link when it's complete.</h1>
+{% endblock %}
+{% block scripts %}
+{{ super() }}
+    <script>
+    $(document).ready(function () {
+            start_task();
+            return true;
+        });
+
+    function start_task() {
+            // send ajax POST request to start background job
+            toastr.options.positionClass = 'toast-top-center';
+            toastr.options.timeOut = 0;
+            toastr.success('Creating invoice report...');
+            $.ajax({
+                type: 'POST',
+                url: '/runreport',
+                success: function(data, status, request) {
+                    status_url = request.getResponseHeader('Location');
+                    update_task(status_url);
+                },
+                error: function() {
+                    alert('Unexpected error');
+                }
+            });
+    }
+
+    function update_task(status_url) {
+            // send GET request to status URL
+            $.getJSON(status_url, function(data) {
+                if (data['status'] == 'complete') {
+                    // show result
+                    toastr.clear()
+                    $(".container").html(data["content"]);
+                }
+                else {
+                    // rerun in 2 seconds
+                    setTimeout(function() {
+                        update_task(status_url);
+                    }, 2000);
+                }
+            });
+    }
+    </script>
+{% endblock %}
