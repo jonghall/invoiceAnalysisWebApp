@@ -539,7 +539,7 @@ def runAnalysis(IC_API_KEY, month):
     # Build Exel Report
     filename = str(uuid.uuid4()) + ".xlsx"
     createReport(filename)
-    return
+    return filename
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
@@ -573,7 +573,6 @@ def reportstatus(task_id):
 @app.route('/download/<filename>')
 def download_file(filename):
     return send_file(filename, attachment_filename="invoiceAnalysis.xlsx", as_attachment=True)
-
 
 setup_logging()
 if __name__ == "__main__":
