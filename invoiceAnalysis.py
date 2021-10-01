@@ -89,7 +89,6 @@ def getInvoiceList(startdate, enddate):
         })
     except SoftLayer.SoftLayerAPIError as e:
         logging.error("Account::getInvoices: %s, %s" % (e.faultCode, e.faultString))
-        quit()
     return invoiceList
 
 def getInvoiceDetail(IC_API_KEY, startdate, enddate):
@@ -166,7 +165,7 @@ def getInvoiceDetail(IC_API_KEY, startdate, enddate):
                                     mask='id, billingItemId, categoryCode, category.name, hourlyFlag, hostName, domainName, product.description, createDate, totalRecurringAmount, totalOneTimeAmount, usageChargeFlag, hourlyRecurringFee, children.description, children.categoryCode, children.product, children.hourlyRecurringFee')
             except SoftLayer.SoftLayerAPIError as e:
                 logging.error("Billing_Invoice::getInvoiceTopLevelItems: %s, %s" % (e.faultCode, e.faultString))
-                quit()
+                return df
 
             count = 0
             # ITERATE THROUGH DETAIL
@@ -438,12 +437,12 @@ def getAccountId(IC_API_KEY):
         authenticator = IAMAuthenticator(IC_API_KEY)
     except ApiException as e:
         logging.error("API exception {}.".format(str(e)))
-        quit()
+        return None
     try:
         iam_identity_service = IamIdentityV1(authenticator=authenticator)
     except ApiException as e:
         logging.error("API exception {}.".format(str(e)))
-        quit()
+        return None
 
     try:
         api_key = iam_identity_service.get_api_keys_details(
@@ -451,7 +450,7 @@ def getAccountId(IC_API_KEY):
         ).get_result()
     except ApiException as e:
         logging.error("API exception {}.".format(str(e)))
-        quit()
+        return None
 
     return api_key["account_id"]
 
@@ -459,17 +458,6 @@ def accountUsage(IC_API_KEY, IC_ACCOUNT_ID, startdate, enddate):
     ##########################################################
     ## Get Usage for Account matching recuring invoice periods
     ##########################################################
-
-    try:
-        authenticator = IAMAuthenticator(IC_API_KEY)
-    except ApiException as e:
-        logging.error("API exception {}.".format(str(e)))
-        quit()
-    try:
-        usage_reports_service = UsageReportsV4(authenticator=authenticator)
-    except ApiException as e:
-        logging.error("API exception {}.".format(str(e)))
-        quit()
 
     accountUsage = pd.DataFrame(columns=['usageMonth',
                                'invoiceMonth',
@@ -481,6 +469,17 @@ def accountUsage(IC_API_KEY, IC_ACCOUNT_ID, startdate, enddate):
                                'quantity',
                                'charges']
                                 )
+
+    try:
+        authenticator = IAMAuthenticator(IC_API_KEY)
+    except ApiException as e:
+        logging.error("API exception {}.".format(str(e)))
+        return accountUsage
+    try:
+        usage_reports_service = UsageReportsV4(authenticator=authenticator)
+    except ApiException as e:
+        logging.error("API exception {}.".format(str(e)))
+        return accountUsage
 
     # PaaS consumption is delayed by one recurring invoice (ie April usage on June 1 recurring invoice)
     paasStart = datetime.strptime(startdate, '%m/%d/%Y') - relativedelta(months=1)
@@ -499,7 +498,7 @@ def accountUsage(IC_API_KEY, IC_ACCOUNT_ID, startdate, enddate):
             ).get_result()
         except ApiException as e:
             logging.error("API exception {}.".format(str(e)))
-            quit()
+            return accountUsage()
         paasStart += relativedelta(months=1)
         for u in usage['resources']:
             for p in u['plans']:
