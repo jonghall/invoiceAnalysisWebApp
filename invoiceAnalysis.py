@@ -1,7 +1,7 @@
 import SoftLayer, os, logging, logging.config, json, calendar, uuid, os.path
 import pandas as pd
 import numpy as np
-from flask import Flask, render_template, request, send_file, jsonify, url_for
+from flask import Flask, render_template, request, send_file, jsonify, url_for, session,after_this_request
 from celery import Celery
 from flask_bootstrap import Bootstrap
 from forms import InvoiceAnalysisRequest
@@ -73,7 +73,7 @@ def getInvoiceList(startdate, enddate):
     # GET LIST OF INVOICES BETWEEN DATES
     #
     logging.info("Looking up invoices from {} to {}....".format(startdate, enddate))
-
+    error = None
     # Build Filter for Invoices
     try:
         invoiceList = client['Account'].getInvoices(mask='id,createDate,typeCode,invoiceTotalAmount,invoiceTotalRecurringAmount,invoiceTopLevelItemCount', filter={
@@ -89,19 +89,15 @@ def getInvoiceList(startdate, enddate):
         })
     except SoftLayer.SoftLayerAPIError as e:
         logging.error("Account::getInvoices: %s, %s" % (e.faultCode, e.faultString))
-    return invoiceList
+        error = ("Account::getInvoices: %s, %s" % (e.faultCode, e.faultString))
+        return None, error
+    return invoiceList, error
 
 def getInvoiceDetail(IC_API_KEY, startdate, enddate):
     #
     # GET InvoiceDetail
     #
     global client, SL_ENDPOINT
-
-    # Create Classic infra API client
-    client = SoftLayer.Client(username="apikey", api_key=IC_API_KEY, endpoint_url=SL_ENDPOINT)
-
-    # get list of invoices between start date and enddate
-    invoiceList = getInvoiceList(startdate, enddate)
 
     # Create dataframe to work with for classic infrastructure invoices
     df = pd.DataFrame(columns=['Portal_Invoice_Date',
@@ -125,6 +121,17 @@ def getInvoiceDetail(IC_API_KEY, startdate, enddate):
                                'InvoiceTotal',
                                'InvoiceRecurring',
                                'Recurring_Description'])
+
+    error = None
+    # Change endpoint to private Endpoint if command line open chosen
+    SL_ENDPOINT = "https://api.softlayer.com/xmlrpc/v3.1"
+    # Create Classic infra API client
+    client = SoftLayer.Client(username="apikey", api_key=IC_API_KEY, endpoint_url=SL_ENDPOINT)
+
+    # get list of invoices between start date and enddate
+    invoiceList, error = getInvoiceList(startdate, enddate)
+    if invoiceList == None:
+        return invoiceList, error
 
     for invoice in invoiceList:
         if float(invoice['invoiceTotalAmount']) == 0:
@@ -165,7 +172,8 @@ def getInvoiceDetail(IC_API_KEY, startdate, enddate):
                                     mask='id, billingItemId, categoryCode, category.name, hourlyFlag, hostName, domainName, product.description, createDate, totalRecurringAmount, totalOneTimeAmount, usageChargeFlag, hourlyRecurringFee, children.description, children.categoryCode, children.product, children.hourlyRecurringFee')
             except SoftLayer.SoftLayerAPIError as e:
                 logging.error("Billing_Invoice::getInvoiceTopLevelItems: %s, %s" % (e.faultCode, e.faultString))
-                return df
+                error =("Billing_Invoice::getInvoiceTopLevelItems: %s, %s" % (e.faultCode, e.faultString))
+                return df, error
 
             count = 0
             # ITERATE THROUGH DETAIL
@@ -260,11 +268,10 @@ def getInvoiceDetail(IC_API_KEY, startdate, enddate):
                         }
 
                 df = df.append(row, ignore_index=True)
-    return df
+    return df, error
 
-def createReport(filename):
+def createReport(filename, classicUsage, paasUsage):
     # Write dataframe to excel
-    global classicUsage, paasUsage, useMonth
     logging.info("Creating Pivots File.")
     writer = pd.ExcelWriter(filename, engine='xlsxwriter')
     workbook = writer.book
@@ -389,7 +396,7 @@ def createReport(filename):
         worksheet.set_column("A:A", 40, format2)
         worksheet.set_column("B:B", 40, format2)
 
-    # IF PaaS credential included add usage reports
+    useMonth = "invoiceMonth"    # IF PaaS credential included add usage reports
     if len(paasUsage) >0:
         paasUsage.to_excel(writer, 'PaaS_Usage')
         worksheet = writer.sheets['PaaS_Usage']
@@ -431,18 +438,20 @@ def getAccountId(IC_API_KEY):
     ##########################################################
     ## Get Account from the passed API Key
     ##########################################################
-
+    error = None
     logging.info("Retrieving IBM Cloud Account ID from ApiKey.")
     try:
         authenticator = IAMAuthenticator(IC_API_KEY)
     except ApiException as e:
         logging.error("API exception {}.".format(str(e)))
-        return None
+        error = ("API exception {}.".format(str(e)))
+        return None, error
     try:
         iam_identity_service = IamIdentityV1(authenticator=authenticator)
     except ApiException as e:
         logging.error("API exception {}.".format(str(e)))
-        return None
+        error = ("API exception {}.".format(str(e)))
+        return None, error
 
     try:
         api_key = iam_identity_service.get_api_keys_details(
@@ -450,15 +459,16 @@ def getAccountId(IC_API_KEY):
         ).get_result()
     except ApiException as e:
         logging.error("API exception {}.".format(str(e)))
-        return None
+        error = ("API exception {}.".format(str(e)))
+        return None, error
 
-    return api_key["account_id"]
+    return api_key["account_id"], error
 
 def accountUsage(IC_API_KEY, IC_ACCOUNT_ID, startdate, enddate):
     ##########################################################
     ## Get Usage for Account matching recuring invoice periods
     ##########################################################
-
+    error = None
     accountUsage = pd.DataFrame(columns=['usageMonth',
                                'invoiceMonth',
                                'resource_name',
@@ -474,12 +484,14 @@ def accountUsage(IC_API_KEY, IC_ACCOUNT_ID, startdate, enddate):
         authenticator = IAMAuthenticator(IC_API_KEY)
     except ApiException as e:
         logging.error("API exception {}.".format(str(e)))
-        return accountUsage
+        error = ("API exception {}.".format(str(e)))
+        return accountUsage, error
     try:
         usage_reports_service = UsageReportsV4(authenticator=authenticator)
     except ApiException as e:
         logging.error("API exception {}.".format(str(e)))
-        return accountUsage
+        error = ("API exception {}.".format(str(e)))
+        return accountUsage, error
 
     # PaaS consumption is delayed by one recurring invoice (ie April usage on June 1 recurring invoice)
     paasStart = datetime.strptime(startdate, '%m/%d/%Y') - relativedelta(months=1)
@@ -498,7 +510,8 @@ def accountUsage(IC_API_KEY, IC_ACCOUNT_ID, startdate, enddate):
             ).get_result()
         except ApiException as e:
             logging.error("API exception {}.".format(str(e)))
-            return accountUsage()
+            error = ("API exception {}.".format(str(e)))
+            return accountUsage(), error
         paasStart += relativedelta(months=1)
         for u in usage['resources']:
             for p in u['plans']:
@@ -515,45 +528,43 @@ def accountUsage(IC_API_KEY, IC_ACCOUNT_ID, startdate, enddate):
                         'charges': x["cost"],
                     }
                     accountUsage = accountUsage.append(row, ignore_index=True)
-    return accountUsage
+    return accountUsage, error
 
 @celery.task()
 def runAnalysis(IC_API_KEY, month):
-    global SL_ENDPOINT, classicUsage, paasUsage, useMonth
     # Calculate invoice dates based on SLIC invoice cutoffs.
     startdate, enddate = getInvoiceDates(month)
 
-    # Change endpoint to private Endpoint if command line open chosen
-    SL_ENDPOINT = "https://api.softlayer.com/xmlrpc/v3.1"
-
     #  Retrieve Invoices from classic
-    classicUsage = getInvoiceDetail(IC_API_KEY, startdate, enddate)
+    classicUsage, error = getInvoiceDetail(IC_API_KEY, startdate, enddate)
 
+    if error != None:
+        return None, error
     # Retrieve Usage from IBM Cloud
-    IC_ACCOUNT_ID = getAccountId(IC_API_KEY)
+    IC_ACCOUNT_ID, error = getAccountId(IC_API_KEY)
+    if error != None:
+        return None, error
 
-    useMonth = "invoiceMonth"
-    paasUsage = accountUsage(IC_API_KEY, IC_ACCOUNT_ID, startdate, enddate)
-
+    paasUsage, error = accountUsage(IC_API_KEY, IC_ACCOUNT_ID, startdate, enddate)
+    if error != None:
+        return None, error
     # Build Exel Report
     filename = str(uuid.uuid4()) + ".xlsx"
-    createReport(filename)
-    return filename
+    createReport(filename, classicUsage, paasUsage)
+    return filename, error
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
-    global IC_API_KEY, month
     form=InvoiceAnalysisRequest(request.form)
     if request.method == 'POST' and form.validate():
-        IC_API_KEY = request.form.get("ic_api_key")
-        month = request.form.get("month")
+        session["IC_API_KEY"] = request.form.get("ic_api_key")
+        session["month"] = request.form.get("month")
         return render_template("running.html")
     return render_template("index.html", form=form)
 
 @app.route('/runreport', methods=['POST'])
 def runreport():
-    global IC_API_KEY, month
-    reportAnalysis=runAnalysis.delay(IC_API_KEY, month )
+    reportAnalysis=runAnalysis.delay(session.get("IC_API_KEY", None), session.get("month", None))
     response = jsonify()
     response.status_code=202
     response.headers['location'] = url_for('reportstatus', task_id=reportAnalysis)
@@ -563,14 +574,41 @@ def runreport():
 @app.route("/reportstatus/<task_id>", methods=["GET"])
 def reportstatus(task_id):
     results = runAnalysis.AsyncResult(task_id)
-    if results.ready():
-        content = render_template('finished.html', filename=results.get())
-        return jsonify({'task_id': task_id, 'status': 'complete', 'content': content})
-    return jsonify({'task_id': task_id, 'status': 'inprocess'})
+    logging.info(results)
+    if results.successful():
+        filename, error = results.get()
+        if error == None:
+            content = render_template('finished.html')
+            session['filename'] = filename
+            status = "complete"
+        else:
+            content = render_template('error.html', error=error)
+            status = "failed"
+        return jsonify({'task_id': task_id, 'status': status, 'content': content})
+    elif results.failed():
+            content = render_template('error.html', error="Unknown Error")
+            status = "failed"
+            return jsonify({'task_id': task_id, 'status': status, 'content': content})
+    else:
+            status = "inprocess"
+    return jsonify({'task_id': task_id, 'status': status})
 
 
-@app.route('/download/<filename>')
-def download_file(filename):
+@app.route('/download')
+def download_file():
+    filename = session.get('filename')
+    if os.path.exists(filename):
+        file_handle = open(filename, 'r')
+    else:
+        return render_template("downloaderror.html")
+    @after_this_request
+    def remove_file(response):
+        try:
+            os.remove(filename)
+            file_handle.close()
+        except Exception as error:
+            logging.error("Error removing or closing downloaded file handle", error)
+        return response
     return send_file(filename, attachment_filename="invoiceAnalysis.xlsx", as_attachment=True)
 
 setup_logging()

@@ -1,5 +1,7 @@
 #!/bin/bash
-
+# activate venv for Python
+source /opt/venv/activate
+cd /app
 # Start the first process
 redis-server &
 status=$?

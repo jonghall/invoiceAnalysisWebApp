@@ -33,7 +33,7 @@
     function update_task(status_url) {
             // send GET request to status URL
             $.getJSON(status_url, function(data) {
-                if (data['status'] == 'complete') {
+                if (data['status'] == 'complete' | data['status'] == 'failed') {
                     // show result
                     toastr.clear()
                     $(".container").html(data["content"]);
