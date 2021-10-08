@@ -567,7 +567,8 @@ def runreport():
     reportAnalysis=runAnalysis.delay(session.get("IC_API_KEY", None), session.get("month", None))
     response = jsonify()
     response.status_code=202
-    response.headers['location'] = url_for('reportstatus', task_id=reportAnalysis)
+    #response.headers['location'] = url_for('reportstatus', task_id=reportAnalysis)
+    response.headers['taskid'] = reportAnalysis
     return response
 
 

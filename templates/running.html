@@ -21,7 +21,7 @@
                 type: 'POST',
                 url: '/runreport',
                 success: function(data, status, request) {
-                    status_url = request.getResponseHeader('Location');
+                    status_url = "/reportstatus/" + request.getResponseHeader('taskid');
                     update_task(status_url);
                 },
                 error: function() {
