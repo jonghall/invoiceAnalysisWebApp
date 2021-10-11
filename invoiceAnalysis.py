@@ -52,18 +52,18 @@ def getSLIClinvoicedate(invoiceDate):
         year = year + 1
     return datetime(year, month, 1).strftime('%Y-%m')
 
-def getInvoiceDates(invoiceDate):
+def getInvoiceDates(startdate,enddate):
     # Adjust dates to match SLIC Invoice cutoffs
-    month = int(invoiceDate[5:7]) - 1
-    year = int(invoiceDate[0:4])
+    month = int(startdate[5:7]) - 1
+    year = int(startdate[0:4])
     if month == 0:
         year = year - 1
         month = 12
     day = 20
     startdate = datetime(year, month, day).strftime('%m/%d/%Y')
 
-    month = int(invoiceDate[5:7])
-    year = int(invoiceDate[0:4])
+    month = int(enddate[5:7])
+    year = int(enddate[0:4])
     day = 19
     enddate = datetime(year, month, day).strftime('%m/%d/%Y')
     return startdate, enddate
@@ -286,26 +286,29 @@ def createReport(filename, classicUsage, paasUsage):
     worksheet.set_column('P:S', 18, usdollar)
 
     #
-    # Map Portal Invoices to SLIC Invoices
+    # Map Portal Invoices to SLIC Invoices / Create Top Sheet per SLIC month
     #
-
     classicUsage["totalAmount"] = classicUsage["totalOneTimeAmount"] + classicUsage["totalRecurringCharge"]
-    SLICInvoice = pd.pivot_table(classicUsage,
-                                 index=["Type", "Portal_Invoice_Number", "Service_Date_Start", "Service_Date_End", "Recurring_Description"],
-                                 values=["totalAmount"],
-                                 aggfunc={'totalAmount': np.sum}, fill_value=0).sort_values(by=['Service_Date_Start'])
 
-    out = pd.concat([d.append(d.sum().rename((k, ' ', ' ', 'Subtotal', ' '))) for k, d in SLICInvoice.groupby('Type')]).append(SLICInvoice.sum().rename((' ', ' ', ' ', 'Pay this Amount', '')))
-    out.rename(columns={"Type": "Invoice Type", "Portal_Invoice_Number": "Invoice",
-                        "Service_Date_Start": "Service Start", "Service_Date_End": "Service End",
-                         "Recurring_Description": "Description", "totalAmount": "Amount"}, inplace=True)
-    out.to_excel(writer, 'TopSheet')
-    worksheet = writer.sheets['TopSheet']
-    format1 = workbook.add_format({'num_format': '$#,##0.00'})
-    format2 = workbook.add_format({'align': 'left'})
-    format_blue = workbook.add_format({"color": "#0000FF"})
-    worksheet.set_column("A:E", 20, format2)
-    worksheet.set_column("F:F", 18, format1)
+    months = classicUsage.IBM_Invoice_Month.unique()
+    for i in months:
+        logging.info("Creating top sheet for %s." % (i))
+        ibminvoicemonth = classicUsage.query('IBM_Invoice_Month == @i')
+        SLICInvoice = pd.pivot_table(ibminvoicemonth,
+                                     index=["Type", "Portal_Invoice_Number", "Service_Date_Start", "Service_Date_End", "Recurring_Description"],
+                                     values=["totalAmount"],
+                                     aggfunc={'totalAmount': np.sum}, fill_value=0).sort_values(by=['Service_Date_Start'])
+
+        out = pd.concat([d.append(d.sum().rename((k, ' ', ' ', 'Subtotal', ' '))) for k, d in SLICInvoice.groupby('Type')]).append(SLICInvoice.sum().rename((' ', ' ', ' ', 'Pay this Amount', '')))
+        out.rename(columns={"Type": "Invoice Type", "Portal_Invoice_Number": "Invoice",
+                            "Service_Date_Start": "Service Start", "Service_Date_End": "Service End",
+                             "Recurring_Description": "Description", "totalAmount": "Amount"}, inplace=True)
+        out.to_excel(writer, 'TopSheet-{}'.format(i))
+        worksheet = writer.sheets['TopSheet-{}'.format(i)]
+        format1 = workbook.add_format({'num_format': '$#,##0.00'})
+        format2 = workbook.add_format({'align': 'left'})
+        worksheet.set_column("A:E", 20, format2)
+        worksheet.set_column("F:F", 18, format1)
 
     #
     # Build a pivot table by Invoice Type
@@ -327,7 +330,7 @@ def createReport(filename, classicUsage, paasUsage):
     #
     # Build a pivot table by Category with totalRecurringCharges
 
-    categorySummary = pd.pivot_table(classicUsage, index=["Category", "Description"],
+    categorySummary = pd.pivot_table(classicUsage, index=["Type", "Category", "Description"],
                                      values=["totalAmount"],
                                      columns=['IBM_Invoice_Month'],
                                      aggfunc={'totalAmount': np.sum}, margins=True, margins_name="Total", fill_value=0)
@@ -531,9 +534,9 @@ def accountUsage(IC_API_KEY, IC_ACCOUNT_ID, startdate, enddate):
     return accountUsage, error
 
 @celery.task()
-def runAnalysis(IC_API_KEY, month):
+def runAnalysis(IC_API_KEY, month, endmonth):
     # Calculate invoice dates based on SLIC invoice cutoffs.
-    startdate, enddate = getInvoiceDates(month)
+    startdate, enddate = getInvoiceDates(month, endmonth)
 
     #  Retrieve Invoices from classic
     classicUsage, error = getInvoiceDetail(IC_API_KEY, startdate, enddate)
@@ -559,18 +562,20 @@ def index():
     if request.method == 'POST' and form.validate():
         session["IC_API_KEY"] = request.form.get("ic_api_key")
         session["month"] = request.form.get("month")
+        if request.form.get("endmonth") != "":
+            session["endmonth"] = request.form.get("endmonth")
+        else:
+            session["endmonth"] = request.form.get("month")
         return render_template("running.html")
     return render_template("index.html", form=form)
 
 @app.route('/runreport', methods=['POST'])
 def runreport():
-    reportAnalysis=runAnalysis.delay(session.get("IC_API_KEY", None), session.get("month", None))
+    reportAnalysis=runAnalysis.delay(session.get("IC_API_KEY", None), session.get("month", None), session.get("endmonth", None))
     response = jsonify()
     response.status_code=202
-    #response.headers['location'] = url_for('reportstatus', task_id=reportAnalysis)
     response.headers['taskid'] = reportAnalysis
     return response
-
 
 @app.route("/reportstatus/<task_id>", methods=["GET"])
 def reportstatus(task_id):

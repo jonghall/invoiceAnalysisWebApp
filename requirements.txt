@@ -21,7 +21,6 @@ jdcal==1.4.1
 Jinja2==3.0.1
 jmespath==0.10.0
 kombu==5.1.0
-logdna==1.18.0
 MarkupSafe==2.0.1
 numpy==1.21.2
 pandas==1.3.2

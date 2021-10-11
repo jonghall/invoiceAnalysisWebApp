@@ -6,7 +6,9 @@
     <form method="post" id="request">
       <dl>
         {{ render_field(form.ic_api_key) }}
-        {{ render_field(form.month) }}
+        {{ render_field(form.month) }}</br>
+        <b>If multiple months desired provide end month.</b></br>
+        {{ render_field(form.endmonth) }}
       </dl>
       <p><input type="submit" id="btnSubmit" value="submit">
     </form>
