@@ -11,14 +11,14 @@ if [ $status -ne 0 ]; then
 fi
 
 # Start the second process
-celery --app=invoiceAnalysis.celery worker -l INFO &
+celery --app=invoiceAnalysis.celery worker -l INFO --uid worker --gid worker&
 status=$?
 if [ $status -ne 0 ]; then
   echo "Failed to start Celery: $status"
   exit $status
 fi
 
-uwsgi --ini uwsgi.ini &
+uwsgi --ini uwsgi.ini&
 status=$?
 if [ $status -ne 0 ]; then
   echo "Failed to start uwsgi server: $status"
