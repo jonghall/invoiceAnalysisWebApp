@@ -25,12 +25,12 @@ Excel worksheet for review.  Each tab has a breakdown based on:
        - ***PaaS_Plan_Summary*** show the additional level of detail for the billing charges for each service and plan consumed.  Note the columns represent the usage month, not billing month.
 
 
-### Setting up IBM Code Engine and building container to run report
+### Setting up IBM Code Engine and building container to start the Web Application
 1. Create project, build job and job.
     1. Open the Code Engine console
     2. Select Start creating from Start from source code.
-    3. Select Job
-    4. Enter a name for the job such as invoiceanalysis. Use a name for your job that is unique within the project.
+    3. Select Application
+    4. Enter a name for the application such as invoiceanalysis. Use a name for your job that is unique within the project.
     5. Select a project from the list of available projects of if this is the first one, create a new one. Note that you must have a selected project to deploy an app.
     6. Enter the URL for this GitHub repository and click specify build details. Make adjustments if needed to URL and Branch name. Click Next.
     7. Select Dockerfile for Strategy, Dockerfile for Dockerfile, 10m for Timeout, and Medium for Build resources. Click Next.
@@ -40,29 +40,4 @@ Excel worksheet for review.  Each tab has a breakdown based on:
     11. Enter a name for your image and optionally a tag.
     12. Click Done.
     13. Click Create.
-2. Create configmaps and secrets.
-    ![env_variables.png](env_variables.png)
-    1. From project list, choose newly created project.
-    2. Select secrets and configmaps
-    3. click create, choose config map, and give it a name. Add the following key value pairs
-        - ***COS_BUCKET*** = Bucket within COS instance to write report file to.
-        - ***COS_ENDPOINT*** = Public COS Endpoint for bucket to write report file to
-        - ***COS_INSTANCE_CRN*** = COS Service Instance CRN in which bucket is located.
-    4. Select secrets and configmaps (again)
-    6 click create, choose secrets, and give it a name. Add the following key value pairs
-         - ***IC_API_KEY*** = an IBM Cloud API Key with Billing access to IBM Cloud Account
-         - ***COS_APIKEY*** = your COS Api Key Id with writter access to appropriate bucket
-3. Choose the job previously created.
-    5. Click on the Environment variables tab.
-    6. Click add, choose reference to full configmap, and choose configmap created in previous step and click add.
-    7. Click add, choose reference to full secret, and choose secrets created in previous step and click add.
-    8. Click add, choose literal value (click add after each, and repeat)
-        -  ***startdate*** = start year & month of invoice analysis in YYYY/MM format
-        -  ***enddate*** = end year & month invoice analysis in YYYY/MM format
-        -  ***output*** = report filename (including extension of XLSX to be written to COS bucket)
-4. to Run report click ***Submit job***
-5, Logging for job can be found from job screen, by clicking Actions, Logging
-</br>
-* Note invoiceAnalysis no longer requires IBM Cloud Classic API keys to execute, and instead uses a single IBM Cloud API Key
-(with billing View Access) to access both classic invoices and PaaS Usage for the cloud account.   Currently, you can provide a separate COS ApiKey, 
-Service, and bucket information to support the ability to write to a bucket in if a different Cloud Account than the billing data is analyzed against.
+2. Logging for job can be found from application screen, by clicking Actions, Logging
