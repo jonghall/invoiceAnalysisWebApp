@@ -1,9 +1,9 @@
 #!/bin/bash
 # activate venv for Python
-source /opt/venv/activate
+source /opt/venv/bin/activate
 cd /app
 # Start the first process
-redis-server &
+redis-server /etc/redis/redis.conf&
 status=$?
 if [ $status -ne 0 ]; then
   echo "Failed to start Redis: $status"
