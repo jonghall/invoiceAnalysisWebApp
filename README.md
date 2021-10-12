@@ -12,15 +12,14 @@ Dockerfile | Docker Build file used by code engine to build container.
 Excel worksheet for review.  Each tab has a breakdown based on:
 
    - ***Detail*** tab has every invoice item for analyzed invoices represented as one row each.  All invoice types are included, including CREDIT invoices.  This data is summarized on the following tabs.
-   - ***InvoiceMap*** tab has a mapping of each portal invoice, portal invoice date, invoice type grouped by the IBM monthly invoice they are billed on.
+   - ***TopSheet-month*** tab has a mapping of each portal invoice, portal invoice date, service dates, and the invoice type to facilitate IBM monthly billing invoices. 
    - ***InvoiceSummary*** tab is a pivot table of all the charges by product category & month for analyzed invoices. It also breaks out oneTime amounts vs Recurring invoices.
-   - ***CategorySummary*** tab is another pivot of all recurring charges broken down by Category, sub category (for example specific VSI sizes)
+   - ***CategorySummary*** tab is another pivot of all charges broken down by Category, sub category (for example specific VSI sizes)
    - The following Excel tabs will only exist if there are servers of these types on the analyzed invoices
         - ***HrlyVirtualServerPivot*** tab is a pivot of just Hourly Classic VSI's
         - ***MnthlyVirtualServerPivot*** tab is a pivot of just monthly Classic VSI's
         - ***HrlyBareMetalServerPivot*** tab is a pivot of Hourly Bare Metal Servers
         - ***MnthlyBareMetalServerPivot*** tab is a pivot table of monthly Bare Metal Server
-   - The following Excel tabs will be created if you supply IC_API_KEY & IC_ACCOUNT
        - ***PaaS_Usage*** shows the complete list of billing items showing the usageMonth, InvoiceMonth, ServiceName, and Plan Name with billable charges for each unit associated with the server. 
        - ***PaaS_Summary*** shows the billing charges for each service consumed.  Note the columns represent the usage month, not billing month. 
        - ***PaaS_Plan_Summary*** show the additional level of detail for the billing charges for each service and plan consumed.  Note the columns represent the usage month, not billing month.
