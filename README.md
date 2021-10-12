@@ -1,5 +1,5 @@
 
-# IBM Cloud Classic Infrastructure Billing API Scripts in Code Engine
+# IBM Cloud Classic Infrastructure Billing API Scripts in Code Engine as a Web Application
 
 Script | Description
 ------ | -----------
