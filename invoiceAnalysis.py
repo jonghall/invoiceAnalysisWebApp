@@ -1,11 +1,12 @@
 import SoftLayer, os, logging, logging.config, json, calendar, uuid, os.path
 import pandas as pd
 import numpy as np
-from flask import Flask, render_template, request, send_file, jsonify, url_for, session,after_this_request
+from flask import Flask, render_template, request, send_file, jsonify, session,after_this_request
 from celery import Celery
 from flask_bootstrap import Bootstrap
 from forms import InvoiceAnalysisRequest
 from datetime import datetime
+from calendar import monthrange
 from dateutil.relativedelta import relativedelta
 from ibm_platform_services import IamIdentityV1, UsageReportsV4
 from ibm_cloud_sdk_core import ApiException
@@ -36,6 +37,14 @@ def getDescription(categoryCode, detail):
             if item['categoryCode'] == categoryCode:
                 return item['product']['description'].strip()
     return ""
+
+def getStorageServiceUsage(categoryCode, detail):
+    for item in detail:
+        if 'categoryCode' in item:
+            if item['categoryCode'] == categoryCode:
+                return item['description'].strip()
+    return ""
+
 
 def getSLIClinvoicedate(invoiceDate):
     # Determine SLIC  Invoice (20th prev month - 19th of month) from portal invoice make current month SLIC invoice.
@@ -117,6 +126,7 @@ def getInvoiceDetail(IC_API_KEY, startdate, enddate):
                                'Hours',
                                'HourlyRate',
                                'totalRecurringCharge',
+                               'NewEstimatedMonthly',
                                'totalOneTimeAmount',
                                'InvoiceTotal',
                                'InvoiceRecurring',
@@ -195,6 +205,7 @@ def getInvoiceDetail(IC_API_KEY, startdate, enddate):
                     hostName = ""
 
                 recurringFee = float(item['totalRecurringAmount'])
+                NewEstimatedMonthly = 0
 
                 # If Hourly calculate hourly rate and total hours
                 if item["hourlyFlag"]:
@@ -218,7 +229,6 @@ def getInvoiceDetail(IC_API_KEY, startdate, enddate):
                         serviceDateEnd = serviceDateStart.replace(day=calendar.monthrange(serviceDateStart.year, serviceDateStart.month)[1])
                         recurringDesc = "Platform Service Usage"
                     else:
-                        # Non Hoorly other
                         if invoiceType == "RECURRING":
                             serviceDateStart = invoiceDate
                             serviceDateEnd = serviceDateStart.replace(day=calendar.monthrange(serviceDateStart.year, serviceDateStart.month)[1])
@@ -227,22 +237,35 @@ def getInvoiceDetail(IC_API_KEY, startdate, enddate):
                     hours = 0
 
                 # Special handling for storage
-                if category == "storage_service_enterprise" or category == "performance_storage_iscsi":
-                    if category == "storage_service_enterprise":
-                        iops = getDescription("storage_tier_level", item["children"])
-                        storage = getDescription("performance_storage_space", item["children"])
-                        snapshot = getDescription("storage_snapshot_space", item["children"])
-                        if snapshot == "":
-                            description = storage + " " + iops + " "
-                        else:
-                            description = storage+" " + iops + " with " + snapshot
+                if category == "storage_service_enterprise":
+                    iops = getDescription("storage_tier_level", item["children"])
+                    storage = getDescription("performance_storage_space", item["children"])
+                    snapshot = getDescription("storage_snapshot_space", item["children"])
+                    if snapshot == "":
+                        description = storage + " " + iops + " "
                     else:
-                        iops = getDescription("performance_storage_iops", item["children"])
-                        storage = getDescription("performance_storage_space", item["children"])
-                        description = storage + " " + iops
+                        description = storage+" " + iops + " with " + snapshot
+                elif category == "performance_storage_iops":
+                    iops = getDescription("performance_storage_iops", item["children"])
+                    storage = getDescription("performance_storage_space", item["children"])
+                    description = storage + " " + iops
+                elif category == "storage_as_a_service":
+                    if item["hourlyFlag"]:
+                        model = "Hourly"
+                    else:
+                        model = "Monthly"
+                    space = getStorageServiceUsage('performance_storage_space', item["children"])
+                    tier = getDescription("storage_tier_level", item["children"])
+                    description = model + " File Storage "+ space + " at " + tier
                 else:
                     description = description.replace('\n', " ")
 
+                if invoiceType == "NEW":
+                    # calculate non pro-rated amount for use in forecast
+                    daysInMonth = monthrange(invoiceDate.year, invoiceDate.month)[1]
+                    daysLeft = daysInMonth - invoiceDate.day + 1
+                    dailyAmount = recurringFee / daysLeft
+                    NewEstimatedMonthly = dailyAmount * daysInMonth
                 # Append record to dataframe
                 row = {'Portal_Invoice_Date': invoiceDate.strftime("%Y-%m-%d"),
                        'Service_Date_Start': serviceDateStart.strftime("%Y-%m-%d"),
@@ -261,6 +284,7 @@ def getInvoiceDetail(IC_API_KEY, startdate, enddate):
                        'HourlyRate': round(hourlyRecurringFee,3),
                        'totalRecurringCharge': round(recurringFee,3),
                        'totalOneTimeAmount': float(totalOneTimeAmount),
+                       'NewEstimatedMonthly': float(NewEstimatedMonthly),
                        'InvoiceTotal': float(invoiceTotalAmount),
                        'InvoiceRecurring': float(invoiceTotalRecurringAmount),
                        'Type': invoiceType,
@@ -341,6 +365,22 @@ def createReport(filename, classicUsage, paasUsage):
     worksheet.set_column("A:A", 40, format2)
     worksheet.set_column("B:B", 40, format2)
     worksheet.set_column("C:ZZ", 18, format1)
+
+    #
+    # Build a pivot table by for Forecasting
+    #logging.info("Creating forecast worksheet.")
+    #forecast = classicUsage.query('IBM_Invoice_Month == "2021-03" and Type == "RECURRING"'
+    #categorySummary = pd.pivot_table(forecast, index=["Type", "Category", "Description"],
+    #                                 values=["totalAmount"],
+    #                                 columns=['IBM_Invoice_Month'],
+    #                                 aggfunc={'totalAmount': np.sum}, margins=True, margins_name="Total", fill_value=0)
+    #categorySummary.to_excel(writer, 'RecurringForecast')
+    #worksheet = writer.sheets['RecurringForecast']
+    #format1 = workbook.add_format({'num_format': '$#,##0.00'})
+    #format2 = workbook.add_format({'align': 'left'})
+    #worksheet.set_column("A:A", 40, format2)
+    #worksheet.set_column("B:B", 40, format2)
+    #worksheet.set_column("C:ZZ", 18, format1)
 
     #
     # Build a pivot table for Hourly VSI's with totalRecurringCharges
