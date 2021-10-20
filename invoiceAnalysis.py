@@ -252,13 +252,29 @@ def getInvoiceDetail(IC_API_KEY, startdate, enddate):
                 elif category == "storage_as_a_service":
                     if item["hourlyFlag"]:
                         model = "Hourly"
+                        for child in item["children"]:
+                            if "hourlyRecurringFee" in child:
+                                hourlyRecurringFee = hourlyRecurringFee + float(child['hourlyRecurringFee'])
+                        hours = round(float(recurringFee) / hourlyRecurringFee)
                     else:
                         model = "Monthly"
                     space = getStorageServiceUsage('performance_storage_space', item["children"])
                     tier = getDescription("storage_tier_level", item["children"])
-                    description = model + " File Storage "+ space + " at " + tier
+                    snapshot = getDescription("storage_snapshot_space", item["children"])
+                    if snapshot == "":
+                        description = model + " File Storage "+ space + " at " + tier
+                    else:
+                        snapshotspace = getStorageServiceUsage('storage_snapshot_space', item["children"])
+                        description = model + " File Storage " + space + " at " + tier + " with " + snapshotspace
+                elif category == "guest_storage":
+                        imagestorage = getStorageServiceUsage("guest_storage_usage", item["children"])
+                        if imagestorage == "":
+                            description = description.replace('\n', " ")
+                        else:
+                            description = imagestorage
                 else:
                     description = description.replace('\n', " ")
+
 
                 if invoiceType == "NEW":
                     # calculate non pro-rated amount for use in forecast
@@ -281,7 +297,7 @@ def getInvoiceDetail(IC_API_KEY, startdate, enddate):
                        'Hourly': item["hourlyFlag"],
                        'Usage': item["usageChargeFlag"],
                        'Hours': hours,
-                       'HourlyRate': round(hourlyRecurringFee,3),
+                       'HourlyRate': round(hourlyRecurringFee,5),
                        'totalRecurringCharge': round(recurringFee,3),
                        'totalOneTimeAmount': float(totalOneTimeAmount),
                        'NewEstimatedMonthly': float(NewEstimatedMonthly),
@@ -305,9 +321,10 @@ def createReport(filename, classicUsage, paasUsage):
     #
     classicUsage.to_excel(writer, 'Detail')
     usdollar = workbook.add_format({'num_format': '$#,##0.00'})
-
     worksheet = writer.sheets['Detail']
-    worksheet.set_column('P:S', 18, usdollar)
+    worksheet.set_column('Q:V', 18, usdollar)
+    totalrows,totalcols=classicUsage.shape
+    worksheet.autofilter(0,0,totalrows,totalcols)
 
     #
     # Map Portal Invoices to SLIC Invoices / Create Top Sheet per SLIC month
