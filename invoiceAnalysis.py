@@ -255,7 +255,11 @@ def getInvoiceDetail(IC_API_KEY, startdate, enddate):
                         for child in item["children"]:
                             if "hourlyRecurringFee" in child:
                                 hourlyRecurringFee = hourlyRecurringFee + float(child['hourlyRecurringFee'])
-                        hours = round(float(recurringFee) / hourlyRecurringFee)
+                        if hourlyRecurringFee>0:
+                            hours = round(float(recurringFee) / hourlyRecurringFee)
+                        else:
+                            hours = 0
+
                     else:
                         model = "Monthly"
                     space = getStorageServiceUsage('performance_storage_space', item["children"])
