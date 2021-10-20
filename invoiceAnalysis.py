@@ -258,6 +258,7 @@ def getInvoiceDetail(IC_API_KEY, startdate, enddate):
                         if hourlyRecurringFee>0:
                             hours = round(float(recurringFee) / hourlyRecurringFee)
                         else:
+                            logging.warning("Error in recurringfee: %s" % item)
                             hours = 0
 
                     else:
