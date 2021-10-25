@@ -13,8 +13,20 @@ from ibm_cloud_sdk_core import ApiException
 from ibm_cloud_sdk_core.authenticators import IAMAuthenticator
 app = Flask(__name__)
 app.config.from_object('config')
-app.config['broker_url'] = 'redis://localhost:6379/0'
-app.config['result_backend'] = 'redis://localhost:6379/0'
+
+# get simple environ, otherwise if code engine extract env from binding
+if os.environ.get("REDIS_USER") != "":
+    redis_user = os.environ.get("REDIS_USER")
+    redis_pw =os.environ.get("REDIS_PW")
+    redis_connection = os.environ.get("REDIS_CONNECTION")
+    app.config['broker_url'] = "rediss://" + redis_user + ":" + redis_pw + "@" + redis_connection + "?ssl_cert_reqs=required"
+    app.config['result_backend'] = "rediss://" + redis_user + ":" + redis_pw + "@" + redis_connection + "?ssl_cert_reqs=required"
+else:
+    redis_connection = json.load(os.environ.get('REDIS_CONNECTION'))
+    cert_name = redis_connection["cli"]["certificate"]["name"]
+    app.config['broker_url'] =  redis_connection["cli"]["arguments"][1] + "?ssl_cert_reqs=required&ssl_ca_certs=/certs/" + cert_name
+    app.config['result_backend'] = redis_connection["cli"]["arguments"][1] + "?ssl_cert_reqs=required&ssl_ca_certs=/certs/" + cert_name
+
 celery = Celery(app.name, broker=app.config['broker_url'])
 celery.conf.update(app.config)
 bootstrap = Bootstrap(app)
@@ -258,19 +270,20 @@ def getInvoiceDetail(IC_API_KEY, startdate, enddate):
                         if hourlyRecurringFee>0:
                             hours = round(float(recurringFee) / hourlyRecurringFee)
                         else:
-                            logging.warning("Error in recurringfee: %s" % item)
                             hours = 0
-
                     else:
                         model = "Monthly"
                     space = getStorageServiceUsage('performance_storage_space', item["children"])
                     tier = getDescription("storage_tier_level", item["children"])
                     snapshot = getDescription("storage_snapshot_space", item["children"])
-                    if snapshot == "":
-                        description = model + " File Storage "+ space + " at " + tier
+                    if space == "" or tier == "":
+                        description = model + " File Storage"
                     else:
-                        snapshotspace = getStorageServiceUsage('storage_snapshot_space', item["children"])
-                        description = model + " File Storage " + space + " at " + tier + " with " + snapshotspace
+                        if snapshot == "":
+                            description = model + " File Storage "+ space + " at " + tier
+                        else:
+                            snapshotspace = getStorageServiceUsage('storage_snapshot_space', item["children"])
+                            description = model + " File Storage " + space + " at " + tier + " with " + snapshotspace
                 elif category == "guest_storage":
                         imagestorage = getStorageServiceUsage("guest_storage_usage", item["children"])
                         if imagestorage == "":

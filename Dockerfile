@@ -21,6 +21,4 @@ WORKDIR /app
 
 RUN pip install -r requirements.txt
 
-RUN apt-get install redis-server redis-tools -y
-
 CMD ./start-script.sh

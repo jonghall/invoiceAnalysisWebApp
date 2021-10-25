@@ -2,13 +2,6 @@
 # activate venv for Python
 source /opt/venv/bin/activate
 cd /app
-# Start the first process
-redis-server /etc/redis/redis.conf&
-status=$?
-if [ $status -ne 0 ]; then
-  echo "Failed to start Redis: $status"
-  exit $status
-fi
 
 # Start the second process
 celery --app=invoiceAnalysis.celery worker -l INFO --uid worker --gid worker&
