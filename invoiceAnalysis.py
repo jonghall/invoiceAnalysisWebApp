@@ -20,6 +20,7 @@ if os.environ.get("REDIS_USER") != "":
     redis_pw =os.environ.get("REDIS_PW")
     redis_connection = os.environ.get("REDIS_CONNECTION")
     cert_name = os.environ.get("REDIS_CERT")
+    logging.info("cert=%s connection=%s" % (cert_name, redis_connection))
     app.config['broker_url'] = "rediss://" + redis_user + ":" + redis_pw + "@" + redis_connection + "?ssl_cert_reqs=required&ssl_ca_certs=" + cert_name
     app.config['result_backend'] = "rediss://" + redis_user + ":" + redis_pw + "@" + redis_connection + "?ssl_cert_reqs=required&ssl_ca_certs=" + cert_name
 else:
