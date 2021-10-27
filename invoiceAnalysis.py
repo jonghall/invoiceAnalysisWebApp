@@ -16,13 +16,8 @@ app.config.from_object('config')
 
 # get simple environ, otherwise if code engine extract env from binding
 if os.environ.get("REDIS_USER") != "":
-    redis_user = os.environ.get("REDIS_USER")
-    redis_pw =os.environ.get("REDIS_PW")
-    redis_connection = os.environ.get("REDIS_CONNECTION")
-    cert_name = os.environ.get("REDIS_CERT")
-    logging.info("cert=%s connection=%s" % (cert_name, redis_connection))
-    app.config['broker_url'] = "rediss://" + redis_user + ":" + redis_pw + "@" + redis_connection + "?ssl_cert_reqs=required&ssl_ca_certs=" + cert_name
-    app.config['result_backend'] = "rediss://" + redis_user + ":" + redis_pw + "@" + redis_connection + "?ssl_cert_reqs=required&ssl_ca_certs=" + cert_name
+    app.config['broker_url'] = "rediss://" + os.environ.get("REDIS_PW") + ":" + os.environ.get("REDIS_PW") + "@" + os.environ.get("REDIS_CONNECTION") + "?ssl_cert_reqs=required&ssl_ca_certs=" + os.environ.get("REDIS_CERT")
+    app.config['result_backend'] = "rediss://" + ros.environ.get("REDIS_PW") + ":" + os.environ.get("REDIS_PW")+ "@" + os.environ.get("REDIS_CONNECTION") + "?ssl_cert_reqs=required&ssl_ca_certs=" + os.environ.get("REDIS_CERT")
 else:
     redis_connection = json.load(os.environ.get('REDIS_CONNECTION'))
     cert_name = redis_connection["cli"]["certificate"]["name"]
