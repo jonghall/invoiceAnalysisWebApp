@@ -25,7 +25,7 @@ fi
 # if it detects that either of the processes has exited.
 # Otherwise it loops forever, waking up every 60 seconds
 
-while sleep 60; do``
+while sleep 60; do
   ps aux |grep celery |grep -q -v grep
   PROCESS_2_STATUS=$?
   ps aux |grep uwsgi |grep -q -v grep
