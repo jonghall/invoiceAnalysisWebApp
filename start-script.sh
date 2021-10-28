@@ -25,9 +25,7 @@ fi
 # if it detects that either of the processes has exited.
 # Otherwise it loops forever, waking up every 60 seconds
 
-while sleep 60; do
-  ps aux |grep redis-server |grep -q -v grep
-  PROCESS_1_STATUS=$?
+while sleep 60; do``
   ps aux |grep celery |grep -q -v grep
   PROCESS_2_STATUS=$?
   ps aux |grep uwsgi |grep -q -v grep
@@ -35,7 +33,7 @@ while sleep 60; do
 
   # If the greps above find anything, they exit with 0 status
   # If they are not both 0, then something is wrong
-  if [ $PROCESS_1_STATUS -ne 0 -o $PROCESS_2_STATUS -ne 0 -o $PROCESS_3_STATUS -ne 0 ]; then
+  if [ -o $PROCESS_2_STATUS -ne 0 -o $PROCESS_3_STATUS -ne 0 ]; then
     echo "One of the processes has already exited."
     exit 1
   fi
