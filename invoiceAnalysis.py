@@ -86,6 +86,7 @@ def getInvoiceDates(startdate,enddate):
 
 def getInvoiceList(startdate, enddate):
     # GET LIST OF PORTAL INVOICES BETWEEN DATES USING CENTRAL (DALLAS) TIME
+    error=None
     dallas=tz.gettz('US/Central')
     logging.info("Looking up invoices from {} to {}.".format(startdate.strftime("%m/%d/%Y %H:%M:%S%z"), enddate.strftime("%m/%d/%Y %H:%M:%S%z")))
     # filter invoices based on local dallas time that correspond to CFTS UTC cutoff
