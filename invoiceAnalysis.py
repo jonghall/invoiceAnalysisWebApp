@@ -1,11 +1,27 @@
-import SoftLayer, os, logging, logging.config, json, calendar, uuid, os.path
+#################################################################################################
+# Author: Jon Hall
+# Copyright (c) 2021
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#     http://www.apache.org/licenses/LICENSE-2.0
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#################################################################################################
+
+import SoftLayer, os, logging, logging.config, json, calendar, uuid, os.path, pytz
 import pandas as pd
 import numpy as np
 from flask import Flask, render_template, request, send_file, jsonify, session,after_this_request
 from celery import Celery
 from flask_bootstrap import Bootstrap
 from forms import InvoiceAnalysisRequest
-from datetime import datetime
+from datetime import datetime, tzinfo, timezone
+from dateutil import tz
 from calendar import monthrange
 from dateutil.relativedelta import relativedelta
 from ibm_platform_services import IamIdentityV1, UsageReportsV4
@@ -56,52 +72,32 @@ def getStorageServiceUsage(categoryCode, detail):
     return ""
 
 
-def getSLIClinvoicedate(invoiceDate):
-    # Determine SLIC  Invoice (20th prev month - 19th of month) from portal invoice make current month SLIC invoice.
-    year = invoiceDate.year
-    month = invoiceDate.month
-    day = invoiceDate.day
-    if day <= 19:
-        month = month + 0
-    else:
-        month = month + 1
-
-    if month > 12:
-        month = month - 12
-        year = year + 1
-    return datetime(year, month, 1).strftime('%Y-%m')
+def getCFTSlinvoicedate(invoiceDate):
+    # Determine CFTS Invoice Month (20th of prev month - 19th of current month) are on current month CFTS invoice.
+    if invoiceDate.day > 19:
+        invoiceDate = invoiceDate + relativedelta(months=1)
+    return invoiceDate.strftime('%Y-%m')
 
 def getInvoiceDates(startdate,enddate):
-    # Adjust dates to match SLIC Invoice cutoffs
-    month = int(startdate[5:7]) - 1
-    year = int(startdate[0:4])
-    if month == 0:
-        year = year - 1
-        month = 12
-    day = 20
-    startdate = datetime(year, month, day).strftime('%m/%d/%Y')
-
-    month = int(enddate[5:7])
-    year = int(enddate[0:4])
-    day = 19
-    enddate = datetime(year, month, day).strftime('%m/%d/%Y')
+    # Adjust start and dates to match CFTS Invoice cutoffs of 20th to end of day 19th 00:00 UTC time on the 20th
+    startdate = datetime(int(startdate[0:4]),int(startdate[5:7]),20,0,0,0,tzinfo=timezone.utc) - relativedelta(months=1)
+    enddate = datetime(int(enddate[0:4]),int(enddate[5:7]),20,0,0,0,tzinfo=timezone.utc)
     return startdate, enddate
 
 def getInvoiceList(startdate, enddate):
-    #
-    # GET LIST OF INVOICES BETWEEN DATES
-    #
-    logging.info("Looking up invoices from {} to {}....".format(startdate, enddate))
-    error = None
-    # Build Filter for Invoices
+    # GET LIST OF PORTAL INVOICES BETWEEN DATES USING CENTRAL (DALLAS) TIME
+    error=None
+    dallas=tz.gettz('US/Central')
+    logging.info("Looking up invoices from {} to {}.".format(startdate.strftime("%m/%d/%Y %H:%M:%S%z"), enddate.strftime("%m/%d/%Y %H:%M:%S%z")))
+    # filter invoices based on local dallas time that correspond to CFTS UTC cutoff
     try:
         invoiceList = client['Account'].getInvoices(mask='id,createDate,typeCode,invoiceTotalAmount,invoiceTotalRecurringAmount,invoiceTopLevelItemCount', filter={
                 'invoices': {
                     'createDate': {
                         'operation': 'betweenDate',
                         'options': [
-                             {'name': 'startDate', 'value': [startdate+" 0:0:0"]},
-                             {'name': 'endDate', 'value': [enddate+" 23:59:59"]}
+                             {'name': 'startDate', 'value': [startdate.astimezone(dallas).strftime("%m/%d/%Y %H:%M:%S")]},
+                             {'name': 'endDate', 'value': [enddate.astimezone(dallas).strftime("%m/%d/%Y %H:%M:%S")]}
                         ]
                     }
                 }
@@ -120,6 +116,7 @@ def getInvoiceDetail(IC_API_KEY, startdate, enddate):
 
     # Create dataframe to work with for classic infrastructure invoices
     df = pd.DataFrame(columns=['Portal_Invoice_Date',
+                               'Portal_Invoice_Time',
                                'Service_Date_Start',
                                'Service_Date_End',
                                'IBM_Invoice_Month',
@@ -159,15 +156,15 @@ def getInvoiceDetail(IC_API_KEY, startdate, enddate):
             continue
 
         invoiceID = invoice['id']
-        invoiceDate = datetime.strptime(invoice['createDate'][:10], "%Y-%m-%d")
+        # To align to CFTS billing convert to UTC time.
+        invoiceDate = datetime.strptime(invoice['createDate'], "%Y-%m-%dT%H:%M:%S%z").astimezone(pytz.utc)
         invoiceTotalAmount = float(invoice['invoiceTotalAmount'])
-
-        SLICInvoiceDate = getSLIClinvoicedate(invoiceDate)
+        CFTSInvoiceDate = getCFTSlinvoicedate(invoiceDate)
 
         invoiceTotalRecurringAmount = float(invoice['invoiceTotalRecurringAmount'])
         invoiceType = invoice['typeCode']
         recurringDesc = ""
-        if invoiceType == "NEW" or invoiceType:
+        if invoiceType == "NEW":
             serviceDateStart = invoiceDate
             # get last day of month
             serviceDateEnd= serviceDateStart.replace(day=calendar.monthrange(serviceDateStart.year,serviceDateStart.month)[1])
@@ -300,9 +297,10 @@ def getInvoiceDetail(IC_API_KEY, startdate, enddate):
                     NewEstimatedMonthly = dailyAmount * daysInMonth
                 # Append record to dataframe
                 row = {'Portal_Invoice_Date': invoiceDate.strftime("%Y-%m-%d"),
+                       'Portal_Invoice_Time': invoiceDate.strftime("%H:%M:%S%z"),
                        'Service_Date_Start': serviceDateStart.strftime("%Y-%m-%d"),
                        'Service_Date_End': serviceDateEnd.strftime("%Y-%m-%d"),
-                       'IBM_Invoice_Month': SLICInvoiceDate,
+                       'IBM_Invoice_Month': CFTSInvoiceDate,
                        'Portal_Invoice_Number': invoiceID,
                        'BillingItemId': billingItemId,
                        'hostName': hostName,
@@ -370,34 +368,36 @@ def createReport(filename, classicUsage, paasUsage):
     #
     # Build a pivot table by Invoice Type
     #
-    invoiceSummary = pd.pivot_table(classicUsage, index=["Type", "Category"],
-                                    values=["totalAmount"],
-                                    columns=['IBM_Invoice_Month'],
-                                    aggfunc={'totalAmount': np.sum,}, margins=True, margins_name="Total", fill_value=0).\
-                                    rename(columns={'totalRecurringCharge': 'TotalRecurring'})
-    invoiceSummary.to_excel(writer, 'InvoiceSummary')
-    worksheet = writer.sheets['InvoiceSummary']
-    format1 = workbook.add_format({'num_format': '$#,##0.00'})
-    format2 = workbook.add_format({'align': 'left'})
-    worksheet.set_column("A:A", 20, format2)
-    worksheet.set_column("B:B", 40, format2)
-    worksheet.set_column("C:ZZ", 18, format1)
+    if len(classicUsage)>0:
+        invoiceSummary = pd.pivot_table(classicUsage, index=["Type", "Category"],
+                                        values=["totalAmount"],
+                                        columns=['IBM_Invoice_Month'],
+                                        aggfunc={'totalAmount': np.sum,}, margins=True, margins_name="Total", fill_value=0).\
+                                        rename(columns={'totalRecurringCharge': 'TotalRecurring'})
+        invoiceSummary.to_excel(writer, 'InvoiceSummary')
+        worksheet = writer.sheets['InvoiceSummary']
+        format1 = workbook.add_format({'num_format': '$#,##0.00'})
+        format2 = workbook.add_format({'align': 'left'})
+        worksheet.set_column("A:A", 20, format2)
+        worksheet.set_column("B:B", 40, format2)
+        worksheet.set_column("C:ZZ", 18, format1)
 
 
     #
     # Build a pivot table by Category with totalRecurringCharges
 
-    categorySummary = pd.pivot_table(classicUsage, index=["Type", "Category", "Description"],
-                                     values=["totalAmount"],
-                                     columns=['IBM_Invoice_Month'],
-                                     aggfunc={'totalAmount': np.sum}, margins=True, margins_name="Total", fill_value=0)
-    categorySummary.to_excel(writer, 'CategorySummary')
-    worksheet = writer.sheets['CategorySummary']
-    format1 = workbook.add_format({'num_format': '$#,##0.00'})
-    format2 = workbook.add_format({'align': 'left'})
-    worksheet.set_column("A:A", 40, format2)
-    worksheet.set_column("B:B", 40, format2)
-    worksheet.set_column("C:ZZ", 18, format1)
+    if len(classicUsage)>0:
+        categorySummary = pd.pivot_table(classicUsage, index=["Type", "Category", "Description"],
+                                         values=["totalAmount"],
+                                         columns=['IBM_Invoice_Month'],
+                                         aggfunc={'totalAmount': np.sum}, margins=True, margins_name="Total", fill_value=0)
+        categorySummary.to_excel(writer, 'CategorySummary')
+        worksheet = writer.sheets['CategorySummary']
+        format1 = workbook.add_format({'num_format': '$#,##0.00'})
+        format2 = workbook.add_format({'align': 'left'})
+        worksheet.set_column("A:A", 40, format2)
+        worksheet.set_column("B:B", 40, format2)
+        worksheet.set_column("C:ZZ", 18, format1)
 
     #
     # Build a pivot table by for Forecasting
@@ -570,8 +570,8 @@ def accountUsage(IC_API_KEY, IC_ACCOUNT_ID, startdate, enddate):
         return accountUsage, error
 
     # PaaS consumption is delayed by one recurring invoice (ie April usage on June 1 recurring invoice)
-    paasStart = datetime.strptime(startdate, '%m/%d/%Y') - relativedelta(months=1)
-    paasEnd = datetime.strptime(enddate, '%m/%d/%Y') - relativedelta(months=2)
+    paasStart = startdate - relativedelta(months=1)
+    paasEnd = enddate - relativedelta(months=2)
 
     while paasStart <= paasEnd + relativedelta(days=1):
         usageMonth = paasStart.strftime('%Y-%m')
