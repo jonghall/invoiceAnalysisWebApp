@@ -72,7 +72,7 @@ def getStorageServiceUsage(categoryCode, detail):
     return ""
 
 
-def getCFTSlinvoicedate(invoiceDate):
+def getCFTSInvoiceDate(invoiceDate):
     # Determine CFTS Invoice Month (20th of prev month - 19th of current month) are on current month CFTS invoice.
     if invoiceDate.day > 19:
         invoiceDate = invoiceDate + relativedelta(months=1)
@@ -156,10 +156,10 @@ def getInvoiceDetail(IC_API_KEY, startdate, enddate):
             continue
 
         invoiceID = invoice['id']
-        # To align to CFTS billing convert to UTC time.
+        # To align to CFTS billing cutoffs convert to UTC time.
         invoiceDate = datetime.strptime(invoice['createDate'], "%Y-%m-%dT%H:%M:%S%z").astimezone(pytz.utc)
         invoiceTotalAmount = float(invoice['invoiceTotalAmount'])
-        CFTSInvoiceDate = getCFTSlinvoicedate(invoiceDate)
+        CFTSInvoiceDate = getCFTSInvoiceDate(invoiceDate)
 
         invoiceTotalRecurringAmount = float(invoice['invoiceTotalRecurringAmount'])
         invoiceType = invoice['typeCode']
@@ -176,7 +176,7 @@ def getInvoiceDetail(IC_API_KEY, startdate, enddate):
         totalItems = invoice['invoiceTopLevelItemCount']
 
         # PRINT INVOICE SUMMARY LINE
-        logging.info('Invoice: {} Date: {} Type:{} Items: {} Amount: ${:,.2f}'.format(invoiceID, datetime.strftime(invoiceDate, "%Y-%m-%d"),invoiceType, totalItems, invoiceTotalRecurringAmount))
+        logging.info('Invoice: {} Date: {} Type:{} Items: {} Amount: ${:,.2f}'.format(invoiceID, datetime.strftime(invoiceDate, "%Y-%m-%d"), invoiceType, totalItems, invoiceTotalRecurringAmount))
 
         limit = 250 ## set limit of record returned
         for offset in range(0, totalItems, limit):
@@ -186,7 +186,9 @@ def getInvoiceDetail(IC_API_KEY, startdate, enddate):
 
             try:
                 Billing_Invoice = client['Billing_Invoice'].getInvoiceTopLevelItems(id=invoiceID, limit=limit, offset=offset,
-                                    mask='id, billingItemId, categoryCode, category.name, hourlyFlag, hostName, domainName, product.description, createDate, totalRecurringAmount, totalOneTimeAmount, usageChargeFlag, hourlyRecurringFee, children.description, children.categoryCode, children.product, children.hourlyRecurringFee')
+                                    mask="id, billingItemId, categoryCode, category.name, hourlyFlag, hostName, domainName, product.description," \
+                                         "createDate, totalRecurringAmount, totalOneTimeAmount, usageChargeFlag, hourlyRecurringFee," \
+                                         "children.description, children.categoryCode, children.product, children.hourlyRecurringFee")
             except SoftLayer.SoftLayerAPIError as e:
                 logging.error("Billing_Invoice::getInvoiceTopLevelItems: %s, %s" % (e.faultCode, e.faultString))
                 error =("Billing_Invoice::getInvoiceTopLevelItems: %s, %s" % (e.faultCode, e.faultString))
@@ -336,7 +338,7 @@ def createReport(filename, classicUsage, paasUsage):
     classicUsage.to_excel(writer, 'Detail')
     usdollar = workbook.add_format({'num_format': '$#,##0.00'})
     worksheet = writer.sheets['Detail']
-    worksheet.set_column('Q:V', 18, usdollar)
+    worksheet.set_column('Q:W', 18, usdollar)
     totalrows,totalcols=classicUsage.shape
     worksheet.autofilter(0,0,totalrows,totalcols)
 
@@ -472,9 +474,9 @@ def createReport(filename, classicUsage, paasUsage):
         worksheet.set_column("A:A", 40, format2)
         worksheet.set_column("B:B", 40, format2)
 
-    useMonth = "invoiceMonth"    # IF PaaS credential included add usage reports
+  # IF PaaS credential included add usage reports
     if len(paasUsage) >0:
-        paasUsage.to_excel(writer, 'PaaS_Usage')
+        paasUsage.to_excel(writer, "PaaS_Usage")
         worksheet = writer.sheets['PaaS_Usage']
         format1 = workbook.add_format({'num_format': '$#,##0.00'})
         format2 = workbook.add_format({'align': 'left'})
@@ -486,7 +488,7 @@ def createReport(filename, classicUsage, paasUsage):
 
         paasSummary = pd.pivot_table(paasUsage, index=["resource_name"],
                                         values=["charges"],
-                                        columns=[useMonth],
+                                        columns=["invoiceMonth"],
                                         aggfunc={'charges': np.sum, }, margins=True, margins_name="Total",
                                         fill_value=0)
         paasSummary.to_excel(writer, 'PaaS_Summary')
@@ -498,7 +500,7 @@ def createReport(filename, classicUsage, paasUsage):
 
         paasSummaryPlan = pd.pivot_table(paasUsage, index=["resource_name", "plan_name"],
                                      values=["charges"],
-                                     columns=[useMonth],
+                                     columns=["invoiceMonth"],
                                      aggfunc={'charges': np.sum, }, margins=True, margins_name="Total",
                                      fill_value=0)
         paasSummaryPlan.to_excel(writer, 'PaaS_Plan_Summary')
