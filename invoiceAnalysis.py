@@ -79,7 +79,7 @@ def getCFTSInvoiceDate(invoiceDate):
     return invoiceDate.strftime('%Y-%m')
 
 def getInvoiceDates(startdate,enddate):
-    # Adjust start and dates to match CFTS Invoice cutoffs of 20th to end of day 19th 00:00 UTC time on the 20th
+    # Adjust start and dates to match CFTS Invoice cutoffs of 20th to end of day 19th 00:00 Dallas time on the 20th
     dallas = tz.gettz('US/Central')
     startdate = datetime(int(startdate[0:4]),int(startdate[5:7]),20,0,0,0,tzinfo=dallas) - relativedelta(months=1)
     enddate = datetime(int(enddate[0:4]),int(enddate[5:7]),20,0,0,0,tzinfo=dallas)
@@ -143,6 +143,7 @@ def getInvoiceDetail(IC_API_KEY, startdate, enddate):
     error = None
     # Change endpoint to private Endpoint if command line open chosen
     SL_ENDPOINT = "https://api.softlayer.com/xmlrpc/v3.1"
+    dallas = tz.gettz('US/Central')
     # Create Classic infra API client
     client = SoftLayer.Client(username="apikey", api_key=IC_API_KEY, endpoint_url=SL_ENDPOINT)
 
@@ -153,12 +154,11 @@ def getInvoiceDetail(IC_API_KEY, startdate, enddate):
 
     for invoice in invoiceList:
         if float(invoice['invoiceTotalAmount']) == 0:
-            #Skip because zero balance
             continue
 
         invoiceID = invoice['id']
-        # To align to CFTS billing cutoffs convert to UTC time.
-        invoiceDate = datetime.strptime(invoice['createDate'], "%Y-%m-%dT%H:%M:%S%z").astimezone(pytz.utc)
+        # To align to CFTS billing cutoffs display time in Dallas timezone.
+        invoiceDate = datetime.strptime(invoice['createDate'], "%Y-%m-%dT%H:%M:%S%z").astimezone(dallas)
         invoiceTotalAmount = float(invoice['invoiceTotalAmount'])
         CFTSInvoiceDate = getCFTSInvoiceDate(invoiceDate)
 
@@ -346,6 +346,7 @@ def createReport(filename, classicUsage, paasUsage):
     #
     # Map Portal Invoices to SLIC Invoices / Create Top Sheet per SLIC month
     #
+
     classicUsage["totalAmount"] = classicUsage["totalOneTimeAmount"] + classicUsage["totalRecurringCharge"]
 
     months = classicUsage.IBM_Invoice_Month.unique()
