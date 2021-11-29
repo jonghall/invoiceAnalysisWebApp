@@ -2,6 +2,9 @@
 *invoiceAnalysis.py* collects IBM Cloud Classic Infrastructure NEW, RECURRING, and CREDIT invoices and PaaS Usage between months specified in the parameters consolidates the data into an Excel worksheet for billing and usage analysis. 
 In addition to consolidation of the detailed data,  pivot tables are created in Excel tabs to assist with understanding account usage.
 
+This implementation is based on [invoiceAnalysis](https://github.com/jonghall/invoiceAnalysis) and is example Web Application written in Python Flask which can be hosted in IBM Code Engine as a Application.
+After collecting the invoices and creating the file the user is prompted to download the Excel file created.
+
 Script | Description
 ------ | -----------
 invoiceAnalysis.py | Analyzes all invoices between two dates and creates excel reports.
@@ -14,7 +17,6 @@ uwsgi.ini | uWSGI server configuration
 | APIKEY | Description | Min Access Permissions
 | ------ | ----------- | ----------------------
 | IBM Cloud API Key | API Key used to pull classic and PaaS invoices and Usage Reports. | IAM Billing Viewer Role
-| COS API Key | API Key used to write output to specified bucket (if specified) | COS Bucket Write access to Bucket at specified Object Storage CRN.
 
 
 ### Output Description
@@ -33,20 +35,21 @@ One Excel worksheet is created with multiple tabs from the collected data (Class
    - ***PaaS_Summary*** shows the invoice charges for each PaaS service consumed.  Note the columns represent CFTS invoice month, not actual usage month.
    - ***PaaS_Plan_Summary*** show an additional level of detail for each PaaS service and plan consumed.  Note the columns represent CFTS invoice month, not actual usage month/
 
-
 ### Setting up IBM Code Engine and building container to start the Web Application
-1. Create project, build job and job.
-    1. Open the Code Engine console
-    2. Select Start creating from Start from source code.
-    3. Select Application
-    4. Enter a name for the application such as invoiceanalysis. Use a name for your job that is unique within the project.
-    5. Select a project from the list of available projects of if this is the first one, create a new one. Note that you must have a selected project to deploy an app.
-    6. Enter the URL for this GitHub repository and click specify build details. Make adjustments if needed to URL and Branch name. Click Next.
-    7. Select Dockerfile for Strategy, Dockerfile for Dockerfile, 10m for Timeout, and Medium for Build resources. Click Next.
-    8.  Select a container registry location, such as IBM Registry, Dallas.
-    9.  Select Automatic for Registry access.
-    10. Select an existing namespace or enter a name for a new one, for example, newnamespace.
-    11. Enter a name for your image and optionally a tag.
-    12. Click Done.
-    13. Click Create.
-2. Logging for job can be found from application screen, by clicking Actions, Logging
+1. Create an instance of a Redis Database.  Minimum defaults are adequate.  Version 5 of REDIS should be chosen.  The redis instances is used by the Web Application to manage background tasks. 
+2. Create project and build the application.  
+   2.1. Open the Code Engine console  
+   2.2. Select Start creating from Start from source code. 
+   2.3. Select Application  
+   2.4. Enter a name for the application such as invoiceanalysis. Use a name for your job that is unique within the project.  
+   2.5. Select a project from the list of available projects of if this is the first one, create a new one. Note that you must have a selected project to deploy an app.  
+   2.6. Enter the URL for this GitHub repository and click specify build details.   Click Next.  
+   2.7. Select Dockerfile for Strategy, Dockerfile for Dockerfile, 10m for Timeout, and Medium for Build resources. Click Next.  
+   2.8. Select a container registry location, such as IBM Registry, Dallas.  
+   2.9. Select Automatic for Registry access.  
+   2.10. Select an existing namespace or enter a name for a new one, for example, newnamespace.  
+   2.11. Enter a name for your image and optionally a tag.  
+   2.12. Click Done.  
+   2.13. Click Create.
+3. Establish a service Binding between the Code Engine application and the created Redis Database.  (per these instructions [Instructions](https://cloud.ibm.com/docs/codeengine?topic=codeengine-service-binding))
+4. Logging for job can be found from application screen, by clicking Actions, Logging
