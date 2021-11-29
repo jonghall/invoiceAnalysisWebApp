@@ -1,5 +1,6 @@
-
-# IBM Cloud Classic Infrastructure Billing API Scripts in Code Engine as a Web Application
+# IBM Cloud Classic Infrastructure Invoice Analysis Report
+*invoiceAnalysis.py* collects IBM Cloud Classic Infrastructure NEW, RECURRING, and CREDIT invoices and PaaS Usage between months specified in the parameters consolidates the data into an Excel worksheet for billing and usage analysis. 
+In addition to consolidation of the detailed data,  pivot tables are created in Excel tabs to assist with understanding account usage.
 
 Script | Description
 ------ | -----------
@@ -7,22 +8,30 @@ invoiceAnalysis.py | Analyzes all invoices between two dates and creates excel r
 requirements.txt | Package requirements
 logging.json | LOGGER config used by script
 Dockerfile | Docker Build file used by code engine to build container.
+uwsgi.ini | uWSGI server configuration
 
-*invoiceAnalysis.py* analyzes IBM Cloud Classic Infrastructure invoices between two dates and consolidates billing data into an
-Excel worksheet for review.  Each tab has a breakdown based on:
+### Identity & Access Management Requirements
+| APIKEY | Description | Min Access Permissions
+| ------ | ----------- | ----------------------
+| IBM Cloud API Key | API Key used to pull classic and PaaS invoices and Usage Reports. | IAM Billing Viewer Role
+| COS API Key | API Key used to write output to specified bucket (if specified) | COS Bucket Write access to Bucket at specified Object Storage CRN.
 
-   - ***Detail*** tab has every invoice item for analyzed invoices represented as one row each.  All invoice types are included, including CREDIT invoices.  This data is summarized on the following tabs.
-   - ***TopSheet-month*** tab has a mapping of each portal invoice, portal invoice date, service dates, and the invoice type to facilitate IBM monthly billing invoices. 
-   - ***InvoiceSummary*** tab is a pivot table of all the charges by product category & month for analyzed invoices. It also breaks out oneTime amounts vs Recurring invoices.
-   - ***CategorySummary*** tab is another pivot of all charges broken down by Category, sub category (for example specific VSI sizes)
-   - The following Excel tabs will only exist if there are servers of these types on the analyzed invoices
-        - ***HrlyVirtualServerPivot*** tab is a pivot of just Hourly Classic VSI's
-        - ***MnthlyVirtualServerPivot*** tab is a pivot of just monthly Classic VSI's
-        - ***HrlyBareMetalServerPivot*** tab is a pivot of Hourly Bare Metal Servers
-        - ***MnthlyBareMetalServerPivot*** tab is a pivot table of monthly Bare Metal Server
-       - ***PaaS_Usage*** shows the complete list of billing items showing the usageMonth, InvoiceMonth, ServiceName, and Plan Name with billable charges for each unit associated with the server. 
-       - ***PaaS_Summary*** shows the billing charges for each service consumed.  Note the columns represent the usage month, not billing month. 
-       - ***PaaS_Plan_Summary*** show the additional level of detail for the billing charges for each service and plan consumed.  Note the columns represent the usage month, not billing month.
+
+### Output Description
+One Excel worksheet is created with multiple tabs from the collected data (Classic Invoices & PaaS Usage between start and end month specified).   _Tabs are only be created if there are related resources on the collected invoices._
+
+*Excel Tab Explanation*
+   - ***Detail*** tab has every invoice item for all the collected invoices represented as one row each. For invoices with multiple items, each row represents one top level invoice item.  All invoice types are included, including CREDIT invoices.  The detail tab can be sorted or filtered to find specific dates, billing item id's, or specific services.  
+   - ***TopSheet-YYYY-MM*** tab(s) map each portal invoice to their corresponding IBM CFTS invoice(s) they are billed on.  These tabs can be used to facilitate reconciliation.
+   - ***InvoiceSummary*** tab is a pivot table of all the charges by product category & month by invoice type. This tab can be used to understand changes in month to month usage.
+   - ***CategorySummary*** tab is a pivot of all recurring charges broken down by Category and sub category (for example specific VSI sizes or Bare metal server types) to dig deeper into month to month usage changes.
+   - ***HrlyVirtualServerPivot*** tab is a pivot of just Hourly Classic VSI's if they exist
+   - ***MnthlyVirtualServerPivot*** tab is a pivot of just monthly Classic VSI's if they exist
+   - ***HrlyBareMetalServerPivot*** tab is a pivot of Hourly Bare Metal Servers if they exist
+   - ***MnthlyBareMetalServerPivot*** tab is a pivot table of monthly Bare Metal Server if they exist
+   - ***PaaS_Usage*** shows the complete list of PaaS Usage showing the usageMonth, InvoiceMonth, ServiceName, and Plan Name with billable charges for each unit associated with the service. 
+   - ***PaaS_Summary*** shows the invoice charges for each PaaS service consumed.  Note the columns represent CFTS invoice month, not actual usage month.
+   - ***PaaS_Plan_Summary*** show an additional level of detail for each PaaS service and plan consumed.  Note the columns represent CFTS invoice month, not actual usage month/
 
 
 ### Setting up IBM Code Engine and building container to start the Web Application
