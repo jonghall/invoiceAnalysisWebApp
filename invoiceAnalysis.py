@@ -80,8 +80,9 @@ def getCFTSInvoiceDate(invoiceDate):
 
 def getInvoiceDates(startdate,enddate):
     # Adjust start and dates to match CFTS Invoice cutoffs of 20th to end of day 19th 00:00 UTC time on the 20th
-    startdate = datetime(int(startdate[0:4]),int(startdate[5:7]),20,0,0,0,tzinfo=timezone.utc) - relativedelta(months=1)
-    enddate = datetime(int(enddate[0:4]),int(enddate[5:7]),20,0,0,0,tzinfo=timezone.utc)
+    dallas = tz.gettz('US/Central')
+    startdate = datetime(int(startdate[0:4]),int(startdate[5:7]),20,0,0,0,tzinfo=dallas) - relativedelta(months=1)
+    enddate = datetime(int(enddate[0:4]),int(enddate[5:7]),20,0,0,0,tzinfo=dallas)
     return startdate, enddate
 
 def getInvoiceList(startdate, enddate):
