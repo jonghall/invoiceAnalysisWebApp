@@ -4,7 +4,7 @@ source /opt/venv/bin/activate
 cd /app
 
 # Start the second process
-celery --app=invoiceAnalysis.celery worker  -n worker-%(process_num)s --concurrency=4 -l INFO --uid worker --gid worker&
+celery --app=invoiceAnalysis.celery worker  --concurrency=4 -l INFO --uid worker --gid worker&
 status=$?
 if [ $status -ne 0 ]; then
   echo "Failed to start Celery: $status"
