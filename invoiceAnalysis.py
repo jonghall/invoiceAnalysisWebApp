@@ -40,11 +40,7 @@ else:
     redis_connection = json.loads(os.environ.get('DATABASES_FOR_REDIS_CONNECTION'))
     cert_name = redis_connection["cli"]["certificate"]["name"]
     app.config["broker_transport"] = "rediss"
-    app.conf["result_backend_transport_options"] = {
-        'retry_policy': {
-            'timeout': 5.0
-        }
-    }
+    app.conif["result_backend_transport_options"]["retry_policy"]["timeout"] = 5
     app.config['broker_url'] =  redis_connection["cli"]["arguments"][0][1] + "?ssl_cert_reqs=required&ssl_ca_certs=/certs/" + cert_name
     app.config['result_backend'] = redis_connection["cli"]["arguments"][0][1] + "?ssl_cert_reqs=required&ssl_ca_certs=/certs/" + cert_name
 
