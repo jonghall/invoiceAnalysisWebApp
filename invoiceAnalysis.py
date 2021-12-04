@@ -43,7 +43,7 @@ else:
     app.config['broker_url'] =  redis_connection["cli"]["arguments"][0][1] + "?ssl_cert_reqs=required&ssl_ca_certs=/certs/" + cert_name
     app.config['result_backend'] = redis_connection["cli"]["arguments"][0][1] + "?ssl_cert_reqs=required&ssl_ca_certs=/certs/" + cert_name
 
-celery = Celery(app.name, broker=app.config['broker_url'], results['result_backend'])
+celery = Celery(app.name)
 celery.conf.update(app.config)
 bootstrap = Bootstrap(app)
 
