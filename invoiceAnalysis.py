@@ -37,7 +37,7 @@ if os.environ.get("REDIS_USER") != None:
     app.config['result_backend'] = "rediss://" + os.environ.get("REDIS_USER") + ":" + os.environ.get("REDIS_PW")+ "@" + os.environ.get("REDIS_CONNECTION") + "?ssl_cert_reqs=required&ssl_ca_certs="+ os.environ.get("REDIS_CERTFILE")
 else:
     # extract from codeengine environment
-    redis_connection = json.load(os.environ.get('DATABASES_FOR_REDIS_CONNECTION'))
+    redis_connection = json.loads(os.environ.get('DATABASES_FOR_REDIS_CONNECTION'))
     cert_name = redis_connection["cli"]["certificate"]["name"]
     app.config["broker_transport"] = "rediss"
     app.config['broker_url'] =  redis_connection["cli"]["arguments"][0][1] + "?ssl_cert_reqs=required&ssl_ca_certs=/certs/" + cert_name
