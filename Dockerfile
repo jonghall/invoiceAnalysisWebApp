@@ -4,21 +4,7 @@ FROM tiangolo/uwsgi-nginx-flask:python3.9
 #
 # Identify the maintainer of an image
 LABEL maintainer="jonhall@us.ibm.com"
-#
-# Install NGINX to test.
-RUN rm /bin/sh && ln -s /bin/bash /bin/sh
 ENV PATH="/app/.local/bin:${PATH}"
-
-RUN apt-get update
-RUN python3 -m venv /opt/venv
-RUN source /opt/venv/bin/activate
-RUN adduser worker
-RUN usermod -aG sudo worker
-RUN echo "worker ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers
-RUN chown worker:worker /app
-COPY --chown=worker:worker . /app
 WORKDIR /app
-
-RUN pip install -r requirements.txt
-
+RUN  rm /bin/sh && ln -s /bin/bash /bin/sh && apt-get update && python3 -m venv /opt/venv && source /opt/venv/bin/activate && adduser worker && usermod -aG sudo worker &&echo "worker ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers && chown worker:worker /app && COPY --chown=worker:worker . /app && pip install -r requirements.txt
 CMD ./start-script.sh
