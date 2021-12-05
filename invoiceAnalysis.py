@@ -372,6 +372,33 @@ def createReport(filename, classicUsage, paasUsage):
         worksheet.set_column("F:F", 18, format1)
 
     #
+    # Build a pivot table by for Forecasting NEW invoices form 1st to 20th and add to last Recurring Invoice to estimate
+    # what the next recurringInvoice will be.   Uses estimated monthly charges from all NEW invoices which occurred after
+    # the recurring invoice.   This forecast assumes, no deprovisioning and NEW additional invoices after 19th.
+    invoicemonth = months[-1]
+    newstart = invoicemonth + "-01"
+    newend = invoicemonth + "-19"
+    forecastR = classicUsage.query('IBM_Invoice_Month == @invoicemonth and Type == "RECURRING"')[['Portal_Invoice_Date', 'IBM_Invoice_Month','Type','Category','totalAmount']]
+    forecastN = classicUsage.query('IBM_Invoice_Month == @invoicemonth and Type == "NEW" and Portal_Invoice_Date >= @newstart and Portal_Invoice_Date <= @newend ')[['Portal_Invoice_Date', 'IBM_Invoice_Month','Type','Category','NewEstimatedMonthly']]
+    result = forecastR.append(forecastN).fillna(0)
+    sum_column = result["totalAmount"] + result["NewEstimatedMonthly"]
+    result["nextRecurring"] = sum_column
+    if len(result) > 0:
+        newForecast = pd.pivot_table(result, index=["Category"],
+                                     values=["totalAmount", "NewEstimatedMonthly", "nextRecurring"],
+                                     aggfunc={'totalAmount': np.sum, 'NewEstimatedMonthly': np.sum, 'nextRecurring': np.sum }, margins=True, margins_name='Total', fill_value=0). \
+            rename(columns={'totalAmount': 'lastRecurringInvoice', 'NewEstimatedMonthly': 'NewEstimatedCharges'})
+
+        column_order = ['lastRecurringInvoice', 'NewEstimatedCharges', 'nextRecurring']
+        newForecast = newForecast.reindex(column_order, axis=1)
+        newForecast.to_excel(writer, 'recurringForecast')
+        worksheet = writer.sheets['recurringForecast']
+        format1 = workbook.add_format({'num_format': '$#,##0.00'})
+        format2 = workbook.add_format({'align': 'left'})
+        worksheet.set_column("A:A", 40, format2)
+        worksheet.set_column("B:D", 25, format1)
+
+    #
     # Build a pivot table by Invoice Type
     #
     if len(classicUsage)>0:
